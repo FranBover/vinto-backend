@@ -1,0 +1,15 @@
+﻿using Eat_Experience.Models;
+
+
+namespace Eat_Experience.Repositories.Interfaces
+{
+    public interface IProductoExtraRepository
+    {
+        Task<IEnumerable<ProductoExtra>> ObtenerTodos();
+        Task<ProductoExtra?> ObtenerPorId(int id);
+        Task<IEnumerable<ProductoExtra>> ObtenerPorProductoId(int productoId);
+        Task Crear(ProductoExtra extra);
+        Task Actualizar(ProductoExtra extra);
+        Task Eliminar(int id);
+    }
+}

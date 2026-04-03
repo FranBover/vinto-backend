@@ -1,0 +1,18 @@
+{
+    "ConnectionStrings": {
+      "DefaultConnection": "Server=localhost\\SQLEXPRESS;Database=EatExperienceDb;Trusted_Connection=True;Encrypt=True;TrustServerCertificate=True;MultipleActiveResultSets=true"
+    },
+    "JwtSettings": {
+      "Key": "YOUR_SECRET_KEY_HERE",
+      "Issuer": "EatExperienceAPI",
+      "Audience": "EatExperienceFrontend",
+      "ExpirationInMinutes": 60
+    },
+    "Logging": {
+      "LogLevel": {
+        "Default": "Information",
+        "Microsoft.AspNetCore": "Warning"
+      }
+    },
+    "AllowedHosts": "*"
+  }
