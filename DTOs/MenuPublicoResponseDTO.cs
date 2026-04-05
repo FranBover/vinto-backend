@@ -33,6 +33,8 @@ namespace Eat_Experience.DTOs
         public string? LogoUrl { get; set; }
         public string Direccion { get; set; } = string.Empty;
         public bool EsActivo { get; set; }
+        public string? AliasTransferencia { get; set; }
+        public string? TitularCuenta { get; set; }
     }
 
     public class MenuPublicoResponseDTO

@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Eat_Experience.Services.Interfaces;
 using Eat_Experience.Models;
+using Eat_Experience.DTOs;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Eat_Experience.Controllers
@@ -58,6 +59,30 @@ namespace Eat_Experience.Controllers
         {
             await _service.Eliminar(id);
             return NoContent();
+        }
+
+        [HttpPatch("{id}/local")]
+        public async Task<IActionResult> PatchLocal(int id, [FromBody] AdministradorLocalUpdateDTO dto)
+        {
+            var adminIdClaim = User.FindFirst("adminId")?.Value;
+            if (adminIdClaim == null || !int.TryParse(adminIdClaim, out int tokenAdminId) || tokenAdminId != id)
+                return Forbid();
+
+            var admin = await _service.ObtenerPorId(id);
+            if (admin == null)
+                return NotFound();
+
+            if (dto.NombreLocal != null) admin.NombreLocal = dto.NombreLocal;
+            if (dto.Telefono != null) admin.Telefono = dto.Telefono;
+            if (dto.Direccion != null) admin.Direccion = dto.Direccion;
+            if (dto.LinkWhatsapp != null) admin.LinkWhatsapp = dto.LinkWhatsapp;
+            if (dto.LogoUrl != null) admin.LogoUrl = dto.LogoUrl;
+            if (dto.EsActivo.HasValue) admin.EsActivo = dto.EsActivo.Value;
+            if (dto.AliasTransferencia != null) admin.AliasTransferencia = dto.AliasTransferencia;
+            if (dto.TitularCuenta != null) admin.TitularCuenta = dto.TitularCuenta;
+
+            await _service.Actualizar(admin);
+            return Ok(admin);
         }
     }
 }

@@ -61,20 +61,16 @@ namespace Eat_Experience.Controllers
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] ProductoUpdateDTO dto)
         {
-            var producto = new Producto
-            {
-                Id = id,
-                Nombre = dto.Nombre,
-                Descripcion = dto.Descripcion,
-                Precio = dto.Precio,
-                ImagenUrl = dto.ImagenUrl,
-                Disponible = dto.Disponible,
-                CategoriaId = dto.CategoriaId,
-                AdministradorId = dto.AdministradorId,
-                Categoria = null!,
-                Administrador = null!,
-                Extras = null!
-            };
+            var producto = await _productoService.ObtenerPorId(id);
+            if (producto == null) return NotFound();
+
+            producto.Nombre = dto.Nombre;
+            producto.Descripcion = dto.Descripcion;
+            producto.Precio = dto.Precio;
+            producto.ImagenUrl = dto.ImagenUrl;
+            producto.Disponible = dto.Disponible;
+            producto.CategoriaId = dto.CategoriaId;
+            // AdministradorId nunca se modifica en un update
 
             await _productoService.Actualizar(producto);
             return NoContent();

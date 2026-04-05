@@ -43,5 +43,11 @@ namespace Eat_Experience.Models
 
         [MaxLength(100)]
         public string? DominioPersonalizado { get; set; }
+
+        [MaxLength(100)]
+        public string? AliasTransferencia { get; set; }
+
+        [MaxLength(100)]
+        public string? TitularCuenta { get; set; }
     }
 }

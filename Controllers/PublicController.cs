@@ -41,7 +41,9 @@ namespace Eat_Experience.Controllers
                     LinkWhatsapp = administrador.LinkWhatsapp,
                     LogoUrl = administrador.LogoUrl,
                     Direccion = administrador.Direccion,
-                    EsActivo = administrador.EsActivo
+                    EsActivo = administrador.EsActivo,
+                    AliasTransferencia = administrador.AliasTransferencia,
+                    TitularCuenta = administrador.TitularCuenta
                 },
                 Categorias = categorias.Select(c => new CategoriaMenuDTO
                 {
