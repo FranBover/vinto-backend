@@ -49,5 +49,11 @@ namespace Eat_Experience.Models
 
         [MaxLength(100)]
         public string? TitularCuenta { get; set; }
+
+        [MaxLength(500)]
+        public string? Horarios { get; set; }
+
+        [Url, MaxLength(500)]
+        public string? UbicacionUrl { get; set; }
     }
 }

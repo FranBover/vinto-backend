@@ -2,13 +2,11 @@ using Eat_Experience.DTOs;
 using Eat_Experience.Models;
 using Eat_Experience.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-
 
 namespace Eat_Experience.Controllers
 {
-    
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class CategoriasController : ControllerBase
@@ -20,30 +18,46 @@ namespace Eat_Experience.Controllers
             _categoriaService = categoriaService;
         }
 
+        private bool TryGetAdminId(out int adminId)
+        {
+            adminId = 0;
+            var claim = User.FindFirst("adminId")?.Value;
+            return claim != null && int.TryParse(claim, out adminId);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetCategorias()
         {
-            var categorias = await _categoriaService.ObtenerTodas();
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var categorias = await _categoriaService.ObtenerPorAdministradorId(adminId);
             return Ok(categorias);
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetCategoria(int id)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
             var categoria = await _categoriaService.ObtenerPorId(id);
             if (categoria == null) return NotFound();
+            if (categoria.AdministradorId != adminId) return Forbid();
 
             return Ok(categoria);
         }
 
-        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] CategoriaCreateDTO dto)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
             var categoria = new Categoria
             {
                 Nombre = dto.Nombre,
-                AdministradorId = dto.AdministradorId,
+                AdministradorId = adminId,
                 Administrador = null!,
                 Productos = null!
             };
@@ -52,30 +66,34 @@ namespace Eat_Experience.Controllers
             return CreatedAtAction(nameof(GetCategoria), new { id = categoria.Id }, categoria);
         }
 
-        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] CategoriaUpdateDTO dto)
         {
-            var categoria = new Categoria
-            {
-                Id = id,
-                Nombre = dto.Nombre,
-                AdministradorId = dto.AdministradorId,
-                Administrador = null!,
-                Productos = null!
-            };
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var categoria = await _categoriaService.ObtenerPorId(id);
+            if (categoria == null) return NotFound();
+            if (categoria.AdministradorId != adminId) return Forbid();
+
+            categoria.Nombre = dto.Nombre;
 
             await _categoriaService.Actualizar(categoria);
             return NoContent();
         }
 
-        [Authorize]
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var categoria = await _categoriaService.ObtenerPorId(id);
+            if (categoria == null) return NotFound();
+            if (categoria.AdministradorId != adminId) return Forbid();
+
             await _categoriaService.Eliminar(id);
             return NoContent();
         }
-
     }
 }

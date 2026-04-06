@@ -5,6 +5,7 @@ namespace Eat_Experience.Repositories.Interfaces
     public interface ICategoriaRepository
     {
         Task<IEnumerable<Categoria>> ObtenerTodas();
+        Task<IEnumerable<Categoria>> ObtenerPorAdministradorId(int adminId);
         Task<Categoria?> ObtenerPorId(int id);
         Task Crear(Categoria categoria);
         Task Actualizar(Categoria categoria);

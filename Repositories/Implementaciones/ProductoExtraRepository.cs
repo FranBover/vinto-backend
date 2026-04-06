@@ -19,9 +19,19 @@ namespace Eat_Experience.Repositories.Implementaciones
             return await _context.ProductoExtras.ToListAsync();
         }
 
+        public async Task<IEnumerable<ProductoExtra>> ObtenerPorAdministradorId(int adminId)
+        {
+            return await _context.ProductoExtras
+                .Include(e => e.Producto)
+                .Where(e => e.Producto.AdministradorId == adminId)
+                .ToListAsync();
+        }
+
         public async Task<ProductoExtra?> ObtenerPorId(int id)
         {
-            return await _context.ProductoExtras.FindAsync(id);
+            return await _context.ProductoExtras
+                .Include(e => e.Producto)
+                .FirstOrDefaultAsync(e => e.Id == id);
         }
 
         public async Task<IEnumerable<ProductoExtra>> ObtenerPorProductoId(int productoId)

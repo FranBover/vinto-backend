@@ -43,7 +43,9 @@ namespace Eat_Experience.Controllers
                     Direccion = administrador.Direccion,
                     EsActivo = administrador.EsActivo,
                     AliasTransferencia = administrador.AliasTransferencia,
-                    TitularCuenta = administrador.TitularCuenta
+                    TitularCuenta = administrador.TitularCuenta,
+                    Horarios = administrador.Horarios,
+                    UbicacionUrl = administrador.UbicacionUrl
                 },
                 Categorias = categorias.Select(c => new CategoriaMenuDTO
                 {

@@ -9,6 +9,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Eat_Experience.Controllers
 {
@@ -18,11 +19,53 @@ namespace Eat_Experience.Controllers
     {
         private readonly AppDbContext _context;
         private readonly JwtSettings _jwtSettings;
+        private readonly IConfiguration _configuration;
 
-        public AuthController(AppDbContext context, IOptions<JwtSettings> jwtSettings)
+        public AuthController(AppDbContext context, IOptions<JwtSettings> jwtSettings, IConfiguration configuration)
         {
             _context = context;
             _jwtSettings = jwtSettings.Value;
+            _configuration = configuration;
+        }
+
+        [AllowAnonymous]
+        [HttpPost("register")]
+        public async Task<IActionResult> Register([FromBody] RegisterAdminDTO dto)
+        {
+            var adminKey = _configuration["AdminRegistroKey"];
+            var headerKey = Request.Headers["X-Admin-Key"].FirstOrDefault();
+
+            if (string.IsNullOrEmpty(headerKey) || headerKey != adminKey)
+                return Unauthorized("Clave de registro inválida.");
+
+            var emailExiste = _context.Administradores.Any(a => a.Email == dto.Email);
+            if (emailExiste)
+                return Conflict("Ya existe un administrador con ese email.");
+
+            var passwordHasher = new PasswordHasher<Administrador>();
+            var admin = new Administrador
+            {
+                Nombre = dto.Nombre,
+                Email = dto.Email,
+                NombreLocal = dto.NombreLocal,
+                Telefono = dto.Telefono,
+                Direccion = dto.Direccion,
+                EsActivo = true,
+                FechaRegistro = DateTime.UtcNow,
+                PasswordHash = string.Empty
+            };
+            admin.PasswordHash = passwordHasher.HashPassword(admin, dto.Password);
+
+            _context.Administradores.Add(admin);
+            await _context.SaveChangesAsync();
+
+            return CreatedAtAction(null, null, new
+            {
+                id = admin.Id,
+                nombre = admin.Nombre,
+                email = admin.Email,
+                nombreLocal = admin.NombreLocal
+            });
         }
 
         [HttpPost("login")]

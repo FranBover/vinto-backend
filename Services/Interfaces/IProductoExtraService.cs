@@ -5,6 +5,7 @@ namespace Eat_Experience.Services.Interfaces
     public interface IProductoExtraService
     {
         Task<IEnumerable<ProductoExtra>> ObtenerTodos();
+        Task<IEnumerable<ProductoExtra>> ObtenerPorAdministradorId(int adminId);
         Task<ProductoExtra?> ObtenerPorId(int id);
         Task Crear(ProductoExtra extra);
         Task Actualizar(ProductoExtra extra);

@@ -2,11 +2,11 @@ using Eat_Experience.DTOs;
 using Eat_Experience.Models;
 using Eat_Experience.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Eat_Experience.Controllers
 {
+    [Authorize]
     [Route("api/[controller]")]
     [ApiController]
     public class ProductosController : ControllerBase
@@ -18,27 +18,42 @@ namespace Eat_Experience.Controllers
             _productoService = productoService;
         }
 
+        private bool TryGetAdminId(out int adminId)
+        {
+            adminId = 0;
+            var claim = User.FindFirst("adminId")?.Value;
+            return claim != null && int.TryParse(claim, out adminId);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetProductos()
         {
-            var productos = await _productoService.ObtenerTodos();
-            var response = productos.Select(MapToResponseDto);
-            return Ok(response);
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var productos = await _productoService.ObtenerPorAdministradorId(adminId);
+            return Ok(productos.Select(MapToResponseDto));
         }
 
         [HttpGet("{id}")]
         public async Task<IActionResult> GetProducto(int id)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
             var producto = await _productoService.ObtenerPorId(id);
             if (producto == null) return NotFound();
+            if (producto.AdministradorId != adminId) return Forbid();
 
             return Ok(MapToResponseDto(producto));
         }
 
-        [Authorize]
         [HttpPost]
         public async Task<IActionResult> Post([FromBody] ProductoCreateDTO dto)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
             var producto = new Producto
             {
                 Nombre = dto.Nombre,
@@ -47,7 +62,7 @@ namespace Eat_Experience.Controllers
                 ImagenUrl = dto.ImagenUrl,
                 Disponible = dto.Disponible,
                 CategoriaId = dto.CategoriaId,
-                AdministradorId = dto.AdministradorId,
+                AdministradorId = adminId,
                 Categoria = null!,
                 Administrador = null!,
                 Extras = null!
@@ -57,12 +72,15 @@ namespace Eat_Experience.Controllers
             return CreatedAtAction(nameof(GetProducto), new { id = producto.Id }, MapToResponseDto(producto));
         }
 
-        [Authorize]
         [HttpPut("{id}")]
         public async Task<IActionResult> Put(int id, [FromBody] ProductoUpdateDTO dto)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
             var producto = await _productoService.ObtenerPorId(id);
             if (producto == null) return NotFound();
+            if (producto.AdministradorId != adminId) return Forbid();
 
             producto.Nombre = dto.Nombre;
             producto.Descripcion = dto.Descripcion;
@@ -70,16 +88,37 @@ namespace Eat_Experience.Controllers
             producto.ImagenUrl = dto.ImagenUrl;
             producto.Disponible = dto.Disponible;
             producto.CategoriaId = dto.CategoriaId;
-            // AdministradorId nunca se modifica en un update
 
             await _productoService.Actualizar(producto);
             return NoContent();
         }
 
-        [Authorize]
+        [HttpPatch("{id}/disponibilidad")]
+        public async Task<IActionResult> PatchDisponibilidad(int id, [FromBody] ProductoDisponibilidadDTO dto)
+        {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var producto = await _productoService.ObtenerPorId(id);
+            if (producto == null) return NotFound();
+            if (producto.AdministradorId != adminId) return Forbid();
+
+            producto.Disponible = dto.Disponible;
+
+            await _productoService.Actualizar(producto);
+            return Ok(MapToResponseDto(producto));
+        }
+
         [HttpDelete("{id}")]
         public async Task<IActionResult> Delete(int id)
         {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var producto = await _productoService.ObtenerPorId(id);
+            if (producto == null) return NotFound();
+            if (producto.AdministradorId != adminId) return Forbid();
+
             await _productoService.Eliminar(id);
             return NoContent();
         }
@@ -98,6 +137,5 @@ namespace Eat_Experience.Controllers
                 AdministradorId = producto.AdministradorId
             };
         }
-
     }
 }

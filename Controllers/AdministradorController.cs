@@ -80,6 +80,8 @@ namespace Eat_Experience.Controllers
             if (dto.EsActivo.HasValue) admin.EsActivo = dto.EsActivo.Value;
             if (dto.AliasTransferencia != null) admin.AliasTransferencia = dto.AliasTransferencia;
             if (dto.TitularCuenta != null) admin.TitularCuenta = dto.TitularCuenta;
+            if (dto.Horarios != null) admin.Horarios = dto.Horarios;
+            if (dto.UbicacionUrl != null) admin.UbicacionUrl = dto.UbicacionUrl;
 
             await _service.Actualizar(admin);
             return Ok(admin);

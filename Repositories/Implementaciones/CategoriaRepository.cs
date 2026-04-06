@@ -19,6 +19,13 @@ namespace Eat_Experience.Repositories.Implementaciones
             return await _context.Categorias.ToListAsync();
         }
 
+        public async Task<IEnumerable<Categoria>> ObtenerPorAdministradorId(int adminId)
+        {
+            return await _context.Categorias
+                .Where(c => c.AdministradorId == adminId)
+                .ToListAsync();
+        }
+
         public async Task<Categoria?> ObtenerPorId(int id)
         {
             return await _context.Categorias.FindAsync(id);

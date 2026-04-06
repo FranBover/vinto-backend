@@ -17,8 +17,17 @@ namespace Eat_Experience.Repositories.Implementaciones
         public async Task<IEnumerable<Producto>> ObtenerTodos()
         {
             return await _context.Productos
-                .Include(p => p.Categoria) // Incluye los datos de la categoría
-                .Include(p => p.Extras)    // Incluye extras si los hay
+                .Include(p => p.Categoria)
+                .Include(p => p.Extras)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<Producto>> ObtenerPorAdministradorId(int adminId)
+        {
+            return await _context.Productos
+                .Include(p => p.Categoria)
+                .Include(p => p.Extras)
+                .Where(p => p.AdministradorId == adminId)
                 .ToListAsync();
         }
 

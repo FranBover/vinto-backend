@@ -19,6 +19,11 @@ namespace Eat_Experience.Services.Implementaciones
             return await _categoriaRepository.ObtenerTodas();
         }
 
+        public async Task<IEnumerable<Categoria>> ObtenerPorAdministradorId(int adminId)
+        {
+            return await _categoriaRepository.ObtenerPorAdministradorId(adminId);
+        }
+
         public async Task<Categoria?> ObtenerPorId(int id)
         {
             return await _categoriaRepository.ObtenerPorId(id);

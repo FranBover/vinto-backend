@@ -35,6 +35,8 @@ namespace Eat_Experience.DTOs
         public bool EsActivo { get; set; }
         public string? AliasTransferencia { get; set; }
         public string? TitularCuenta { get; set; }
+        public string? Horarios { get; set; }
+        public string? UbicacionUrl { get; set; }
     }
 
     public class MenuPublicoResponseDTO
