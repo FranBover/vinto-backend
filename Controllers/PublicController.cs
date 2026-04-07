@@ -1,9 +1,9 @@
-using Eat_Experience.Data;
-using Eat_Experience.DTOs;
+using Vinto.Api.Data;
+using Vinto.Api.DTOs;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
-namespace Eat_Experience.Controllers
+namespace Vinto.Api.Controllers
 {
     [ApiController]
     [Route("api/public")]

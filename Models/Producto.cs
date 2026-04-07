@@ -2,7 +2,7 @@
 using System.ComponentModel.DataAnnotations;
 using Microsoft.EntityFrameworkCore;
 
-namespace Eat_Experience.Models
+namespace Vinto.Api.Models
 {
     public class Producto
     {

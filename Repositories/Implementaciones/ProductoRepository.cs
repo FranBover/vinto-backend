@@ -1,9 +1,9 @@
-﻿using Eat_Experience.Models;
-using Eat_Experience.Data;
+﻿using Vinto.Api.Models;
+using Vinto.Api.Data;
 using Microsoft.EntityFrameworkCore;
-using Eat_Experience.Repositories.Interfaces;
+using Vinto.Api.Repositories.Interfaces;
 
-namespace Eat_Experience.Repositories.Implementaciones
+namespace Vinto.Api.Repositories.Implementaciones
 {
     public class ProductoRepository : IProductoRepository
     {

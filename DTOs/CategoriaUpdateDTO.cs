@@ -1,4 +1,4 @@
-namespace Eat_Experience.DTOs
+namespace Vinto.Api.DTOs
 {
     public class CategoriaUpdateDTO
     {

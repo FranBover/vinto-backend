@@ -1,12 +1,12 @@
-﻿using Eat_Experience.DTOs;
-using Eat_Experience.Models;
-using Eat_Experience.Services.Implementaciones;
-using Eat_Experience.Services.Interfaces;
+﻿using Vinto.Api.DTOs;
+using Vinto.Api.Models;
+using Vinto.Api.Services.Implementaciones;
+using Vinto.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Eat_Experience.Controllers
+namespace Vinto.Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

@@ -1,4 +1,4 @@
-﻿namespace Eat_Experience.Models
+﻿namespace Vinto.Api.Models
 {
     public class JwtSettings
     {

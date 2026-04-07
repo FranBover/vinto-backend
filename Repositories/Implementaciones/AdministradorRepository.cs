@@ -1,9 +1,9 @@
-﻿using Eat_Experience.Data;
-using Eat_Experience.Models;
-using Eat_Experience.Repositories.Interfaces;
+﻿using Vinto.Api.Data;
+using Vinto.Api.Models;
+using Vinto.Api.Repositories.Interfaces;
 using Microsoft.EntityFrameworkCore;
 
-namespace Eat_Experience.Repositories.Implementaciones
+namespace Vinto.Api.Repositories.Implementaciones
 {
     public class AdministradorRepository : IAdministradorRepository
     {

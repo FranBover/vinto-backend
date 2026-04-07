@@ -1,6 +1,6 @@
-﻿using Eat_Experience.Models;
+﻿using Vinto.Api.Models;
 
-namespace Eat_Experience.Repositories.Interfaces
+namespace Vinto.Api.Repositories.Interfaces
 {
     public interface IPedidoRepository
     {

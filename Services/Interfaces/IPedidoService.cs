@@ -1,7 +1,7 @@
-using Eat_Experience.DTOs;
-using Eat_Experience.Models;
+using Vinto.Api.DTOs;
+using Vinto.Api.Models;
 
-namespace Eat_Experience.Services.Interfaces
+namespace Vinto.Api.Services.Interfaces
 {
     public interface IPedidoService
     {

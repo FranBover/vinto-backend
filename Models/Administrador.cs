@@ -1,7 +1,7 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace Eat_Experience.Models
+namespace Vinto.Api.Models
 {
     public class Administrador
     {

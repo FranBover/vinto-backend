@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace Eat_Experience.Migrations
+namespace Vinto.Api.Migrations
 {
     /// <inheritdoc />
     public partial class multitenantv1 : Migration

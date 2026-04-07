@@ -1,9 +1,9 @@
-﻿using Eat_Experience.Models;
-using Eat_Experience.Services.Interfaces;
+﻿using Vinto.Api.Models;
+using Vinto.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 
-namespace Eat_Experience.Controllers
+namespace Vinto.Api.Controllers
 {
 
     [ApiController]

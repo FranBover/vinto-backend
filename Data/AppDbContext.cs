@@ -1,8 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore;
-using Eat_Experience.Models;
+using Vinto.Api.Models;
 using System.Collections.Generic;
 
-namespace Eat_Experience.Data
+namespace Vinto.Api.Data
 {
     public class AppDbContext :DbContext
     {

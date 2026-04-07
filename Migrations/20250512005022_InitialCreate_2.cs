@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace Eat_Experience.Migrations
+namespace Vinto.Api.Migrations
 {
     /// <inheritdoc />
     public partial class InitialCreate_2 : Migration

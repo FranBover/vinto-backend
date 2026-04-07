@@ -1,8 +1,8 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Eat_Experience.Data;
-using Eat_Experience.DTOs;
-using Eat_Experience.Models;
+using Vinto.Api.Data;
+using Vinto.Api.DTOs;
+using Vinto.Api.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -11,7 +11,7 @@ using System.Text;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Authorization;
 
-namespace Eat_Experience.Controllers
+namespace Vinto.Api.Controllers
 {
     [Route("api/[controller]")]
     [ApiController]

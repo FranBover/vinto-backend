@@ -2,7 +2,7 @@
 
 #nullable disable
 
-namespace Eat_Experience.Migrations
+namespace Vinto.Api.Migrations
 {
     /// <inheritdoc />
     public partial class Sync_20250910 : Migration

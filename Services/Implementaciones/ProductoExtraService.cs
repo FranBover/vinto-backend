@@ -1,8 +1,8 @@
-﻿using Eat_Experience.Models;
-using Eat_Experience.Repositories.Interfaces;
-using Eat_Experience.Services.Interfaces;
+﻿using Vinto.Api.Models;
+using Vinto.Api.Repositories.Interfaces;
+using Vinto.Api.Services.Interfaces;
 
-namespace Eat_Experience.Services.Implementaciones
+namespace Vinto.Api.Services.Implementaciones
 {
     public class ProductoExtraService : IProductoExtraService
     {

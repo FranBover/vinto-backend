@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace Eat_Experience.DTOs
+namespace Vinto.Api.DTOs
 {
     public class RegisterAdminDTO
     {
