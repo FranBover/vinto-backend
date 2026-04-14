@@ -101,6 +101,24 @@ namespace Vinto.Api.Repositories.Implementaciones
             await _context.SaveChangesAsync();
         }
 
+        public async Task<Pedido?> GetComandaAsync(int pedidoId, int adminId)
+            => await GetPedidoConTodo(pedidoId, adminId);
+
+        public async Task<Pedido?> GetTicketAsync(int pedidoId, int adminId)
+            => await GetPedidoConTodo(pedidoId, adminId);
+
+        private async Task<Pedido?> GetPedidoConTodo(int pedidoId, int adminId)
+        {
+            return await _context.Pedidos
+                .AsNoTracking()
+                .Include(p => p.Administrador)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.Producto)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.ProductosExtra)
+                        .ThenInclude(e => e.ProductoExtra)
+                .FirstOrDefaultAsync(p => p.Id == pedidoId && p.AdministradorId == adminId);
+        }
 
     }
 }

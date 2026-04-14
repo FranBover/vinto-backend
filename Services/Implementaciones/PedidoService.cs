@@ -305,6 +305,92 @@ namespace Vinto.Api.Services.Implementaciones
             return comentario;
         }
 
+        public async Task<ComandaResponseDTO?> GetComandaAsync(int pedidoId, int adminId)
+        {
+            var pedido = await _pedidoRepository.GetComandaAsync(pedidoId, adminId);
+            if (pedido == null)
+                return null;
+
+            return new ComandaResponseDTO
+            {
+                NumeroPedido = pedido.Id,
+                CodigoSeguimiento = $"PED-{pedido.Id:D6}",
+                FechaCreacion = pedido.Fecha,
+                FormaEntrega = pedido.FormaEntrega,
+                NombreCliente = pedido.NombreCliente ?? string.Empty,
+                DireccionCliente = pedido.DireccionCliente,
+                ReferenciaDireccion = pedido.ReferenciaDireccion,
+                Items = pedido.Detalles.Select(d => new ComandaItemDTO
+                {
+                    NombreProducto = d.Producto?.Nombre ?? $"Producto #{d.ProductoId}",
+                    Cantidad = d.Cantidad,
+                    Extras = d.ProductosExtra
+                        .Select(e => e.ProductoExtra?.Nombre)
+                        .Where(n => !string.IsNullOrWhiteSpace(n))
+                        .Select(n => n!)
+                        .ToList()
+                }).ToList()
+            };
+        }
+
+        public async Task<TicketResponseDTO?> GetTicketAsync(int pedidoId, int adminId)
+        {
+            var pedido = await _pedidoRepository.GetTicketAsync(pedidoId, adminId);
+            if (pedido == null)
+                return null;
+
+            var items = pedido.Detalles.Select(d =>
+            {
+                var extrasSubtotal = d.ProductosExtra
+                    .Sum(e => e.ProductoExtra?.PrecioAdicional ?? 0m);
+
+                return new TicketItemDTO
+                {
+                    NombreProducto = d.Producto?.Nombre ?? $"Producto #{d.ProductoId}",
+                    Cantidad = d.Cantidad,
+                    PrecioUnitario = d.PrecioUnitario,
+                    Subtotal = (d.PrecioUnitario + extrasSubtotal) * d.Cantidad,
+                    Extras = d.ProductosExtra.Select(e => new TicketExtraDTO
+                    {
+                        Nombre = e.ProductoExtra?.Nombre ?? string.Empty,
+                        PrecioAdicional = e.ProductoExtra?.PrecioAdicional ?? 0m
+                    }).ToList()
+                };
+            }).ToList();
+
+            var subtotal = items.Sum(i => i.Subtotal);
+            var costoEnvio = pedido.Total - subtotal;
+
+            decimal? vuelto = null;
+            if (pedido.FormaPago == "Efectivo"
+                && pedido.MontoPagoEfectivo.HasValue
+                && pedido.MontoPagoEfectivo.Value > pedido.Total)
+            {
+                vuelto = pedido.MontoPagoEfectivo.Value - pedido.Total;
+            }
+
+            return new TicketResponseDTO
+            {
+                NumeroPedido = pedido.Id,
+                CodigoSeguimiento = $"PED-{pedido.Id:D6}",
+                NombreLocal = pedido.Administrador?.NombreLocal ?? string.Empty,
+                TelefonoLocal = pedido.Administrador?.Telefono ?? string.Empty,
+                FechaCreacion = pedido.Fecha,
+                NombreCliente = pedido.NombreCliente ?? string.Empty,
+                TelefonoCliente = pedido.TelefonoCliente ?? string.Empty,
+                FormaEntrega = pedido.FormaEntrega,
+                DireccionCliente = pedido.DireccionCliente,
+                ReferenciaDireccion = pedido.ReferenciaDireccion,
+                FormaPago = pedido.FormaPago,
+                Items = items,
+                Subtotal = subtotal,
+                CostoEnvio = costoEnvio,
+                Total = pedido.Total,
+                MontoPagoEfectivo = pedido.MontoPagoEfectivo,
+                Vuelto = vuelto
+            };
+        }
+
         private static string Slugify(string value)
         {
             if (string.IsNullOrWhiteSpace(value))

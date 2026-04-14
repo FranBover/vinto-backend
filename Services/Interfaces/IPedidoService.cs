@@ -19,5 +19,8 @@ namespace Vinto.Api.Services.Interfaces
         Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega);
         Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId);
         Task<ComentarioPedido?> AddComentarioAsync(int pedidoId, int adminId, string texto);
+
+        Task<ComandaResponseDTO?> GetComandaAsync(int pedidoId, int adminId);
+        Task<TicketResponseDTO?> GetTicketAsync(int pedidoId, int adminId);
     }
 }

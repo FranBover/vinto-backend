@@ -13,5 +13,8 @@ namespace Vinto.Api.Repositories.Interfaces
 
         Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId);
         Task AddComentarioAsync(ComentarioPedido comentario);
+
+        Task<Pedido?> GetComandaAsync(int pedidoId, int adminId);
+        Task<Pedido?> GetTicketAsync(int pedidoId, int adminId);
     }
 }

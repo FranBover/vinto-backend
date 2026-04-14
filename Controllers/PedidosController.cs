@@ -195,6 +195,36 @@ namespace Vinto.Api.Controllers
         }
 
         [Authorize]
+        [HttpGet("{id}/comanda")]
+        public async Task<IActionResult> GetComanda(int id)
+        {
+            var adminIdClaim = User.FindFirst("adminId")?.Value;
+            if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
+                return Unauthorized();
+
+            var comanda = await _pedidoService.GetComandaAsync(id, adminId);
+            if (comanda == null)
+                return NotFound("Pedido no encontrado");
+
+            return Ok(comanda);
+        }
+
+        [Authorize]
+        [HttpGet("{id}/ticket")]
+        public async Task<IActionResult> GetTicket(int id)
+        {
+            var adminIdClaim = User.FindFirst("adminId")?.Value;
+            if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
+                return Unauthorized();
+
+            var ticket = await _pedidoService.GetTicketAsync(id, adminId);
+            if (ticket == null)
+                return NotFound("Pedido no encontrado");
+
+            return Ok(ticket);
+        }
+
+        [Authorize]
         [HttpGet("{id}/comentarios")]
         public async Task<IActionResult> GetComentarios(int id)
         {
