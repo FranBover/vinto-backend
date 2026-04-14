@@ -168,7 +168,9 @@ namespace Vinto.Api.Services.Implementaciones
             };
 
             decimal subtotal = 0m;
-            const decimal costoEnvio = 0m;
+            decimal costoEnvio = request.FormaEntrega == "Delivery" && admin.CostoEnvio.HasValue
+                ? admin.CostoEnvio.Value
+                : 0m;
 
             foreach (var detalleDTO in request.Detalles)
             {

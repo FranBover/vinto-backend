@@ -55,5 +55,10 @@ namespace Vinto.Api.Models
 
         [Url, MaxLength(500)]
         public string? UbicacionUrl { get; set; }
+
+        [MaxLength(20)]
+        public string ZonaEnvio { get; set; } = "Nacional"; // "Ciudad" or "Nacional"
+
+        public decimal? CostoEnvio { get; set; }
     }
 }

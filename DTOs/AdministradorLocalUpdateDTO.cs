@@ -12,5 +12,7 @@ namespace Vinto.Api.DTOs
         public string? TitularCuenta { get; set; }
         public string? Horarios { get; set; }
         public string? UbicacionUrl { get; set; }
+        public string? ZonaEnvio { get; set; }
+        public decimal? CostoEnvio { get; set; }
     }
 }

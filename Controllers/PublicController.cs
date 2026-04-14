@@ -45,7 +45,9 @@ namespace Vinto.Api.Controllers
                     AliasTransferencia = administrador.AliasTransferencia,
                     TitularCuenta = administrador.TitularCuenta,
                     Horarios = administrador.Horarios,
-                    UbicacionUrl = administrador.UbicacionUrl
+                    UbicacionUrl = administrador.UbicacionUrl,
+                    ZonaEnvio = administrador.ZonaEnvio,
+                    CostoEnvio = administrador.CostoEnvio
                 },
                 Categorias = categorias.Select(c => new CategoriaMenuDTO
                 {

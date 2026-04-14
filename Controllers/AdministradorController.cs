@@ -82,6 +82,8 @@ namespace Vinto.Api.Controllers
             if (dto.TitularCuenta != null) admin.TitularCuenta = dto.TitularCuenta;
             if (dto.Horarios != null) admin.Horarios = dto.Horarios;
             if (dto.UbicacionUrl != null) admin.UbicacionUrl = dto.UbicacionUrl;
+            if (dto.ZonaEnvio != null) admin.ZonaEnvio = dto.ZonaEnvio;
+            if (dto.CostoEnvio.HasValue) admin.CostoEnvio = dto.CostoEnvio.Value;
 
             await _service.Actualizar(admin);
             return Ok(admin);
