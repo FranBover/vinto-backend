@@ -55,8 +55,52 @@ namespace Vinto.Api.Repositories.Implementaciones
             }
         }
 
+        public async Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega)
+        {
+            var query = _context.Pedidos
+                .Where(p => p.AdministradorId == adminId)
+                .AsQueryable();
 
-        
+            if (!string.IsNullOrWhiteSpace(estado))
+                query = query.Where(p => p.Estado == estado);
+
+            if (desde.HasValue)
+                query = query.Where(p => p.Fecha >= desde.Value);
+
+            if (hasta.HasValue)
+                query = query.Where(p => p.Fecha <= hasta.Value);
+
+            if (!string.IsNullOrWhiteSpace(formaPago))
+                query = query.Where(p => p.FormaPago == formaPago);
+
+            if (!string.IsNullOrWhiteSpace(formaEntrega))
+                query = query.Where(p => p.FormaEntrega == formaEntrega);
+
+            return await query
+                .Include(p => p.Detalles)
+                .ToListAsync();
+        }
+
+        public async Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId)
+        {
+            var pedidoExiste = await _context.Pedidos
+                .AnyAsync(p => p.Id == pedidoId && p.AdministradorId == adminId);
+
+            if (!pedidoExiste)
+                return null;
+
+            return await _context.ComentariosPedido
+                .Where(c => c.PedidoId == pedidoId)
+                .OrderBy(c => c.FechaCreacion)
+                .ToListAsync();
+        }
+
+        public async Task AddComentarioAsync(ComentarioPedido comentario)
+        {
+            _context.ComentariosPedido.Add(comentario);
+            await _context.SaveChangesAsync();
+        }
+
 
     }
 }

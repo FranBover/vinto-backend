@@ -275,6 +275,36 @@ namespace Vinto.Api.Services.Implementaciones
             return GenerarResumenWhatsApp(pedido, nombreLocal, codigoSeguimiento);
         }
 
+        public async Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega)
+        {
+            return await _pedidoRepository.ObtenerFiltrados(adminId, estado, desde, hasta, formaPago, formaEntrega);
+        }
+
+        public async Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId)
+        {
+            return await _pedidoRepository.GetComentariosAsync(pedidoId, adminId);
+        }
+
+        public async Task<ComentarioPedido?> AddComentarioAsync(int pedidoId, int adminId, string texto)
+        {
+            var pedidoExiste = await _context.Pedidos
+                .AnyAsync(p => p.Id == pedidoId && p.AdministradorId == adminId);
+
+            if (!pedidoExiste)
+                return null;
+
+            var comentario = new ComentarioPedido
+            {
+                PedidoId = pedidoId,
+                AdministradorId = adminId,
+                Texto = texto,
+                FechaCreacion = DateTime.UtcNow
+            };
+
+            await _pedidoRepository.AddComentarioAsync(comentario);
+            return comentario;
+        }
+
         private static string Slugify(string value)
         {
             if (string.IsNullOrWhiteSpace(value))

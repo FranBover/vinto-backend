@@ -29,28 +29,32 @@ namespace Vinto.Api.Controllers
 
         [Authorize]
         [HttpGet]
-        public async Task<IActionResult> Get()
+        public async Task<IActionResult> Get(
+            [FromQuery] string? estado,
+            [FromQuery] DateTime? desde,
+            [FromQuery] DateTime? hasta,
+            [FromQuery] string? formaPago,
+            [FromQuery] string? formaEntrega)
         {
             var adminIdClaim = User.FindFirst("adminId")?.Value;
             if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
                 return Unauthorized();
 
-            var pedidos = await _context.Pedidos
-                .Where(p => p.AdministradorId == adminId)
-                .Select(p => new PedidoListItemResponseDTO
-                {
-                    Id = p.Id,
-                    Fecha = p.Fecha,
-                    Estado = p.Estado,
-                    NombreCliente = p.NombreCliente,
-                    FormaPago = p.FormaPago,
-                    FormaEntrega = p.FormaEntrega,
-                    Total = p.Total,
-                    ItemsCount = p.Detalles.Count()
-                })
-                .ToListAsync();
+            var pedidos = await _pedidoService.ObtenerFiltrados(adminId, estado, desde, hasta, formaPago, formaEntrega);
 
-            return Ok(pedidos);
+            var resultado = pedidos.Select(p => new PedidoListItemResponseDTO
+            {
+                Id = p.Id,
+                Fecha = p.Fecha,
+                Estado = p.Estado,
+                NombreCliente = p.NombreCliente,
+                FormaPago = p.FormaPago,
+                FormaEntrega = p.FormaEntrega,
+                Total = p.Total,
+                ItemsCount = p.Detalles.Count()
+            }).ToList();
+
+            return Ok(resultado);
         }
 
         [Authorize]
@@ -188,6 +192,48 @@ namespace Vinto.Api.Controllers
                 return NotFound("Pedido no encontrado");
 
             return Ok(new { resumen });
+        }
+
+        [Authorize]
+        [HttpGet("{id}/comentarios")]
+        public async Task<IActionResult> GetComentarios(int id)
+        {
+            var adminIdClaim = User.FindFirst("adminId")?.Value;
+            if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
+                return Unauthorized();
+
+            var comentarios = await _pedidoService.GetComentariosAsync(id, adminId);
+            if (comentarios == null)
+                return NotFound("Pedido no encontrado");
+
+            var resultado = comentarios.Select(c => new ComentarioPedidoResponseDTO
+            {
+                Id = c.Id,
+                Texto = c.Texto,
+                FechaCreacion = c.FechaCreacion
+            }).ToList();
+
+            return Ok(resultado);
+        }
+
+        [Authorize]
+        [HttpPost("{id}/comentarios")]
+        public async Task<IActionResult> AddComentario(int id, [FromBody] ComentarioPedidoCreateDTO dto)
+        {
+            var adminIdClaim = User.FindFirst("adminId")?.Value;
+            if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
+                return Unauthorized();
+
+            var comentario = await _pedidoService.AddComentarioAsync(id, adminId, dto.Texto);
+            if (comentario == null)
+                return NotFound("Pedido no encontrado");
+
+            return Ok(new ComentarioPedidoResponseDTO
+            {
+                Id = comentario.Id,
+                Texto = comentario.Texto,
+                FechaCreacion = comentario.FechaCreacion
+            });
         }
     }
 }

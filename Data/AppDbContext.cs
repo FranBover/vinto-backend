@@ -16,6 +16,7 @@ namespace Vinto.Api.Data
         public DbSet<DetallePedido> DetallesPedido { get; set; }
         public DbSet<Administrador> Administradores { get; set; }
         public DbSet<DetallePedidoExtra> DetallePedidoExtras { get; set; }
+        public DbSet<ComentarioPedido> ComentariosPedido { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -127,6 +128,22 @@ namespace Vinto.Api.Data
             modelBuilder.Entity<DetallePedidoExtra>()
                 .HasIndex(x => new { x.DetallePedidoId, x.ProductoExtraId })
                 .IsUnique();
+
+            // Pedido (1) - (N) ComentarioPedido
+            modelBuilder.Entity<ComentarioPedido>()
+                .HasOne(c => c.Pedido)
+                .WithMany()
+                .HasForeignKey(c => c.PedidoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<ComentarioPedido>()
+                .HasOne(c => c.Administrador)
+                .WithMany()
+                .HasForeignKey(c => c.AdministradorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<ComentarioPedido>()
+                .HasIndex(c => c.PedidoId);
 
             // ---------------- (Opcional) Filtros globales multi-tenant ----------------
             // Si inyectás ITenantProvider en el DbContext (constructor), activá:
