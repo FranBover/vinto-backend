@@ -4,9 +4,11 @@ using Vinto.Api.Repositories.Implementaciones;
 using Vinto.Api.Services.Interfaces;
 using Vinto.Api.Services.Implementaciones;
 using Vinto.Api.Hubs;
+using Vinto.Api.Storage;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
+using Microsoft.Extensions.FileProviders;
 using System.Text;
 using Vinto.Api.Models;
 using Microsoft.Extensions.Options;
@@ -76,6 +78,9 @@ builder.Services.AddScoped<IDetallePedidoExtraService, DetallePedidoExtraService
 
 
 
+// Storage
+builder.Services.AddScoped<IStorageProvider, LocalStorageProvider>();
+
 builder.Services.AddSignalR();
 
 // Controllers y Swagger
@@ -136,6 +141,17 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+
+app.UseStaticFiles();
+
+var uploadsPath = Path.Combine(builder.Environment.ContentRootPath, "uploads");
+Directory.CreateDirectory(uploadsPath);
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider(uploadsPath),
+    RequestPath = "/uploads"
+});
+
 
 app.UseCors("AllowFrontend");
 

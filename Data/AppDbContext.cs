@@ -17,6 +17,7 @@ namespace Vinto.Api.Data
         public DbSet<Administrador> Administradores { get; set; }
         public DbSet<DetallePedidoExtra> DetallePedidoExtras { get; set; }
         public DbSet<ComentarioPedido> ComentariosPedido { get; set; }
+        public DbSet<Imagen> Imagenes { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -144,6 +145,37 @@ namespace Vinto.Api.Data
 
             modelBuilder.Entity<ComentarioPedido>()
                 .HasIndex(c => c.PedidoId);
+
+            // ---------------- Imagen ----------------
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.NombreOriginal).HasMaxLength(255);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.NombreAlmacenado).HasMaxLength(255);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.ContentType).HasMaxLength(100);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.Url).HasMaxLength(500);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.Tipo).HasMaxLength(50);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.Orden).HasDefaultValue(0);
+
+            modelBuilder.Entity<Imagen>()
+                .Property(i => i.FechaCreacion).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<Imagen>()
+                .HasOne(i => i.Administrador)
+                .WithMany()
+                .HasForeignKey(i => i.AdministradorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<Imagen>()
+                .HasIndex(i => new { i.AdministradorId, i.Tipo, i.EntidadId });
 
             // ---------------- (Opcional) Filtros globales multi-tenant ----------------
             // Si inyectás ITenantProvider en el DbContext (constructor), activá:
