@@ -1,8 +1,10 @@
 using Vinto.Api.Data;
 using Vinto.Api.DTOs;
+using Vinto.Api.Hubs;
 using Vinto.Api.Models;
 using Vinto.Api.Repositories.Interfaces;
 using Vinto.Api.Services.Interfaces;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using System.Text;
 
@@ -12,11 +14,13 @@ namespace Vinto.Api.Services.Implementaciones
     {
         private readonly AppDbContext _context;
         private readonly IPedidoRepository _pedidoRepository;
+        private readonly IHubContext<PedidosHub> _hubContext;
 
-        public PedidoService(IPedidoRepository pedidoRepository, AppDbContext context)
+        public PedidoService(IPedidoRepository pedidoRepository, AppDbContext context, IHubContext<PedidosHub> hubContext)
         {
             _pedidoRepository = pedidoRepository;
             _context = context;
+            _hubContext = hubContext;
         }
 
         public async Task<IEnumerable<Pedido>> ObtenerTodos()
@@ -224,7 +228,18 @@ namespace Vinto.Api.Services.Implementaciones
             pedido.Total = subtotal + costoEnvio;
             _context.Pedidos.Add(pedido);
             await _context.SaveChangesAsync();
-            
+
+            await _hubContext.Clients
+                .Group(admin.Id.ToString())
+                .SendAsync("NuevoPedido", new
+                {
+                    pedidoId = pedido.Id,
+                    codigoSeguimiento = $"PED-{pedido.Id:D6}",
+                    nombreCliente = pedido.NombreCliente,
+                    total = pedido.Total,
+                    fechaCreacion = pedido.Fecha
+                });
+
             // Recargamos con Includes para tener nombres reales (local/productos/extras) sin ciclos.
             var pedidoRecargado = await _context.Pedidos
                 .AsNoTracking()

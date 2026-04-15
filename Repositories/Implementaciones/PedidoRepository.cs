@@ -27,7 +27,10 @@ namespace Vinto.Api.Repositories.Implementaciones
         {
             return await _context.Pedidos
                 .Include(p => p.Detalles)
-                .ThenInclude(d => d.Producto)
+                    .ThenInclude(d => d.Producto)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.ProductosExtra)
+                        .ThenInclude(e => e.ProductoExtra)
                 .FirstOrDefaultAsync(p => p.Id == id);
         }
 

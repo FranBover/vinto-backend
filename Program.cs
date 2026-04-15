@@ -3,6 +3,7 @@ using Vinto.Api.Repositories.Interfaces;
 using Vinto.Api.Repositories.Implementaciones;
 using Vinto.Api.Services.Interfaces;
 using Vinto.Api.Services.Implementaciones;
+using Vinto.Api.Hubs;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -75,6 +76,8 @@ builder.Services.AddScoped<IDetallePedidoExtraService, DetallePedidoExtraService
 
 
 
+builder.Services.AddSignalR();
+
 // Controllers y Swagger
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
@@ -116,7 +119,8 @@ builder.Services.AddCors(options =>
         {
             policy.WithOrigins("http://localhost:5173")
                   .AllowAnyHeader()
-                  .AllowAnyMethod();
+                  .AllowAnyMethod()
+                  .AllowCredentials(); // requerido por SignalR
         });
 });
 
@@ -138,6 +142,8 @@ app.UseCors("AllowFrontend");
 app.UseAuthentication();
 
 app.UseAuthorization();
+
+app.MapHub<PedidosHub>("/hubs/pedidos");
 
 app.MapControllers();
 
