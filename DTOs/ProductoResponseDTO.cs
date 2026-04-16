@@ -10,6 +10,7 @@ namespace Vinto.Api.DTOs
         public bool Disponible { get; set; }
         public int CategoriaId { get; set; }
         public int AdministradorId { get; set; }
+        public List<ImagenResponseDTO> Imagenes { get; set; } = new();
     }
 }
 

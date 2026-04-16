@@ -80,6 +80,7 @@ builder.Services.AddScoped<IDetallePedidoExtraService, DetallePedidoExtraService
 
 // Storage
 builder.Services.AddScoped<IStorageProvider, LocalStorageProvider>();
+builder.Services.AddScoped<IImagenService, ImagenService>();
 
 builder.Services.AddSignalR();
 

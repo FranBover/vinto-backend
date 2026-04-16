@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dotnet build:*)",
       "Bash(dotnet ef:*)",
-      "Bash(find ./Models -type f -name \"*.cs\" -exec wc -l {} +)"
+      "Bash(find ./Models -type f -name \"*.cs\" -exec wc -l {} +)",
+      "Bash(dotnet add *)"
     ]
   }
 }

@@ -1,8 +1,10 @@
+using Vinto.Api.Data;
 using Vinto.Api.DTOs;
 using Vinto.Api.Models;
 using Vinto.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Vinto.Api.Controllers
 {
@@ -12,10 +14,12 @@ namespace Vinto.Api.Controllers
     public class ProductosController : ControllerBase
     {
         private readonly IProductoService _productoService;
+        private readonly AppDbContext _context;
 
-        public ProductosController(IProductoService productoService)
+        public ProductosController(IProductoService productoService, AppDbContext context)
         {
             _productoService = productoService;
+            _context = context;
         }
 
         private bool TryGetAdminId(out int adminId)
@@ -32,7 +36,21 @@ namespace Vinto.Api.Controllers
                 return Forbid();
 
             var productos = await _productoService.ObtenerPorAdministradorId(adminId);
-            return Ok(productos.Select(MapToResponseDto));
+
+            var imagenes = await _context.Imagenes
+                .Where(i => i.AdministradorId == adminId && i.Tipo == "producto")
+                .OrderBy(i => i.Orden)
+                .ToListAsync();
+
+            var imagenesPorProducto = imagenes
+                .GroupBy(i => i.EntidadId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            return Ok(productos.Select(p =>
+            {
+                imagenesPorProducto.TryGetValue(p.Id, out var imgs);
+                return MapToResponseDto(p, imgs);
+            }));
         }
 
         [HttpGet("{id}")]
@@ -45,7 +63,12 @@ namespace Vinto.Api.Controllers
             if (producto == null) return NotFound();
             if (producto.AdministradorId != adminId) return Forbid();
 
-            return Ok(MapToResponseDto(producto));
+            var imagenes = await _context.Imagenes
+                .Where(i => i.AdministradorId == adminId && i.Tipo == "producto" && i.EntidadId == id)
+                .OrderBy(i => i.Orden)
+                .ToListAsync();
+
+            return Ok(MapToResponseDto(producto, imagenes));
         }
 
         [HttpPost]
@@ -69,7 +92,7 @@ namespace Vinto.Api.Controllers
             };
 
             await _productoService.Crear(producto);
-            return CreatedAtAction(nameof(GetProducto), new { id = producto.Id }, MapToResponseDto(producto));
+            return CreatedAtAction(nameof(GetProducto), new { id = producto.Id }, MapToResponseDto(producto, null));
         }
 
         [HttpPut("{id}")]
@@ -106,7 +129,7 @@ namespace Vinto.Api.Controllers
             producto.Disponible = dto.Disponible;
 
             await _productoService.Actualizar(producto);
-            return Ok(MapToResponseDto(producto));
+            return Ok(MapToResponseDto(producto, null));
         }
 
         [HttpDelete("{id}")]
@@ -123,7 +146,7 @@ namespace Vinto.Api.Controllers
             return NoContent();
         }
 
-        private static ProductoResponseDTO MapToResponseDto(Producto producto)
+        private static ProductoResponseDTO MapToResponseDto(Producto producto, List<Imagen>? imagenes)
         {
             return new ProductoResponseDTO
             {
@@ -134,7 +157,18 @@ namespace Vinto.Api.Controllers
                 ImagenUrl = producto.ImagenUrl,
                 Disponible = producto.Disponible,
                 CategoriaId = producto.CategoriaId,
-                AdministradorId = producto.AdministradorId
+                AdministradorId = producto.AdministradorId,
+                Imagenes = imagenes?.Select(i => new ImagenResponseDTO
+                {
+                    Id = i.Id,
+                    Url = i.Url,
+                    Tipo = i.Tipo,
+                    EntidadId = i.EntidadId,
+                    Orden = i.Orden,
+                    NombreOriginal = i.NombreOriginal,
+                    TamanioBytes = i.TamanioBytes,
+                    FechaCreacion = i.FechaCreacion
+                }).ToList() ?? new List<ImagenResponseDTO>()
             };
         }
     }

@@ -32,6 +32,23 @@ namespace Vinto.Api.Controllers
                     .ThenInclude(p => p.Extras)
                 .ToListAsync();
 
+            var imagenes = await _context.Imagenes
+                .Where(i => i.AdministradorId == administrador.Id && i.Tipo == "producto")
+                .OrderBy(i => i.Orden)
+                .ToListAsync();
+
+            var imagenesPorProducto = imagenes
+                .GroupBy(i => i.EntidadId)
+                .ToDictionary(g => g.Key, g => g.ToList());
+
+            var logoImagen = await _context.Imagenes
+                .Where(i => i.AdministradorId == administrador.Id && i.Tipo == "logo")
+                .OrderByDescending(i => i.FechaCreacion)
+                .FirstOrDefaultAsync();
+
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+            var logoImagenUrl = logoImagen != null ? baseUrl + logoImagen.Url : null;
+
             var response = new MenuPublicoResponseDTO
             {
                 Local = new LocalInfoDTO
@@ -40,6 +57,7 @@ namespace Vinto.Api.Controllers
                     Telefono = administrador.Telefono,
                     LinkWhatsapp = administrador.LinkWhatsapp,
                     LogoUrl = administrador.LogoUrl,
+                    LogoImagenUrl = logoImagenUrl,
                     Direccion = administrador.Direccion,
                     EsActivo = administrador.EsActivo,
                     AliasTransferencia = administrador.AliasTransferencia,
@@ -53,20 +71,29 @@ namespace Vinto.Api.Controllers
                 {
                     Id = c.Id,
                     Nombre = c.Nombre,
-                    Productos = c.Productos.Select(p => new ProductoMenuDTO
+                    Productos = c.Productos.Select(p =>
                     {
-                        Id = p.Id,
-                        Nombre = p.Nombre,
-                        Descripcion = p.Descripcion,
-                        Precio = p.Precio,
-                        ImagenUrl = p.ImagenUrl,
-                        Disponible = p.Disponible,
-                        Extras = p.Extras.Select(e => new ProductoExtraMenuDTO
+                        imagenesPorProducto.TryGetValue(p.Id, out var imgs);
+                        return new ProductoMenuDTO
                         {
-                            Id = e.Id,
-                            Nombre = e.Nombre,
-                            PrecioAdicional = e.PrecioAdicional
-                        }).ToList()
+                            Id = p.Id,
+                            Nombre = p.Nombre,
+                            Descripcion = p.Descripcion,
+                            Precio = p.Precio,
+                            ImagenUrl = p.ImagenUrl,
+                            Disponible = p.Disponible,
+                            Extras = p.Extras.Select(e => new ProductoExtraMenuDTO
+                            {
+                                Id = e.Id,
+                                Nombre = e.Nombre,
+                                PrecioAdicional = e.PrecioAdicional
+                            }).ToList(),
+                            Imagenes = imgs?.Select(i => new ImagenMenuDTO
+                            {
+                                Url = i.Url,
+                                Orden = i.Orden
+                            }).ToList() ?? new List<ImagenMenuDTO>()
+                        };
                     }).ToList()
                 }).ToList()
             };

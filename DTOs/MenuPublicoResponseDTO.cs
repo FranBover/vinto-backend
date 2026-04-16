@@ -1,5 +1,11 @@
 namespace Vinto.Api.DTOs
 {
+    public class ImagenMenuDTO
+    {
+        public string Url { get; set; } = string.Empty;
+        public int Orden { get; set; }
+    }
+
     public class ProductoExtraMenuDTO
     {
         public int Id { get; set; }
@@ -16,6 +22,7 @@ namespace Vinto.Api.DTOs
         public string? ImagenUrl { get; set; }
         public bool Disponible { get; set; }
         public List<ProductoExtraMenuDTO> Extras { get; set; } = new();
+        public List<ImagenMenuDTO> Imagenes { get; set; } = new();
     }
 
     public class CategoriaMenuDTO
@@ -31,6 +38,7 @@ namespace Vinto.Api.DTOs
         public string Telefono { get; set; } = string.Empty;
         public string? LinkWhatsapp { get; set; }
         public string? LogoUrl { get; set; }
+        public string? LogoImagenUrl { get; set; }
         public string Direccion { get; set; } = string.Empty;
         public bool EsActivo { get; set; }
         public string? AliasTransferencia { get; set; }
