@@ -30,6 +30,10 @@ namespace Vinto.Api.Models
         [Required, Precision(18, 2)]
         public decimal PrecioUnitario { get; set; }
 
+        public int? VarianteProductoId { get; set; }
+
+        public VarianteProducto? VarianteProducto { get; set; }
+
         // Opcional: permitir agregar extras en cada producto del pedido
         public ICollection<DetallePedidoExtra> ProductosExtra { get; set; } = new List<DetallePedidoExtra>();
     }

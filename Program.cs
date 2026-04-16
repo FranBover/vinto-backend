@@ -65,6 +65,9 @@ builder.Services.AddScoped<IPedidoRepository, PedidoRepository>();
 builder.Services.AddScoped<IDetallePedidoRepository, DetallePedidoRepository>();
 builder.Services.AddScoped<IAdministradorRepository, AdministradorRepository>();
 builder.Services.AddScoped<IDetallePedidoExtraRepository, DetallePedidoExtraRepository>();
+builder.Services.AddScoped<ITipoVarianteRepository, TipoVarianteRepository>();
+builder.Services.AddScoped<IOpcionVarianteRepository, OpcionVarianteRepository>();
+builder.Services.AddScoped<IVarianteProductoRepository, VarianteProductoRepository>();
 
 // Servicios
 
@@ -75,6 +78,9 @@ builder.Services.AddScoped<IPedidoService, PedidoService>();
 builder.Services.AddScoped<IDetallePedidoRepository, DetallePedidoRepository>();
 builder.Services.AddScoped<IAdministradorService, AdministradorService>();
 builder.Services.AddScoped<IDetallePedidoExtraService, DetallePedidoExtraService>();
+builder.Services.AddScoped<ITipoVarianteService, TipoVarianteService>();
+builder.Services.AddScoped<IOpcionVarianteService, OpcionVarianteService>();
+builder.Services.AddScoped<IVarianteProductoService, VarianteProductoService>();
 
 
 

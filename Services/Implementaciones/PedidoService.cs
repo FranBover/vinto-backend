@@ -188,11 +188,38 @@ namespace Vinto.Api.Services.Implementaciones
                 if (producto == null)
                     throw new KeyNotFoundException($"Producto con ID {detalleDTO.ProductoId} no encontrado para este local.");
 
+                decimal precioUnitario;
+                int? varianteProductoId = null;
+
+                if (producto.TieneVariantes)
+                {
+                    if (detalleDTO.VarianteProductoId == null)
+                        throw new InvalidOperationException($"El producto '{producto.Nombre}' requiere seleccionar una variante.");
+
+                    var variante = await _context.VariantesProducto
+                        .AsNoTracking()
+                        .FirstOrDefaultAsync(v => v.Id == detalleDTO.VarianteProductoId);
+
+                    if (variante == null || variante.ProductoId != producto.Id)
+                        throw new InvalidOperationException($"La variante seleccionada no es válida para el producto '{producto.Nombre}'.");
+
+                    if (!variante.Disponible)
+                        throw new InvalidOperationException("La variante seleccionada no está disponible.");
+
+                    precioUnitario = variante.Precio;
+                    varianteProductoId = variante.Id;
+                }
+                else
+                {
+                    precioUnitario = producto.Precio;
+                }
+
                 var detalle = new DetallePedido
                 {
                     ProductoId = producto.Id,
                     Cantidad = detalleDTO.Cantidad,
-                    PrecioUnitario = producto.Precio,
+                    PrecioUnitario = precioUnitario,
+                    VarianteProductoId = varianteProductoId,
                     ProductosExtra = new List<DetallePedidoExtra>()
                 };
 
@@ -240,7 +267,7 @@ namespace Vinto.Api.Services.Implementaciones
                     fechaCreacion = pedido.Fecha
                 });
 
-            // Recargamos con Includes para tener nombres reales (local/productos/extras) sin ciclos.
+            // Recargamos con Includes para tener nombres reales (local/productos/extras/variantes) sin ciclos.
             var pedidoRecargado = await _context.Pedidos
                 .AsNoTracking()
                 .Include(p => p.Detalles)
@@ -248,6 +275,12 @@ namespace Vinto.Api.Services.Implementaciones
                 .Include(p => p.Detalles)
                     .ThenInclude(d => d.ProductosExtra)
                         .ThenInclude(e => e.ProductoExtra)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion1)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion2)
                 .FirstOrDefaultAsync(p => p.Id == pedido.Id);
 
             var codigoSeguimiento = $"PED-{pedido.Id:D6}";
@@ -280,6 +313,12 @@ namespace Vinto.Api.Services.Implementaciones
                 .Include(p => p.Detalles)
                     .ThenInclude(d => d.ProductosExtra)
                         .ThenInclude(e => e.ProductoExtra)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion1)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion2)
                 .FirstOrDefaultAsync(p => p.Id == pedidoId && p.AdministradorId == adminId);
 
             if (pedido == null)
@@ -432,7 +471,17 @@ namespace Vinto.Api.Services.Implementaciones
             foreach (var detalle in pedido.Detalles)
             {
                 var nombreProducto = detalle.Producto?.Nombre ?? $"Producto #{detalle.ProductoId}";
-                sb.AppendLine($"- {detalle.Cantidad} x {nombreProducto} (${detalle.PrecioUnitario} c/u)");
+
+                var descripcionVariante = string.Empty;
+                if (detalle.VarianteProducto != null)
+                {
+                    var v = detalle.VarianteProducto;
+                    descripcionVariante = v.Opcion2 != null
+                        ? $" ({v.Opcion1.Valor} / {v.Opcion2.Valor})"
+                        : $" ({v.Opcion1.Valor})";
+                }
+
+                sb.AppendLine($"- {detalle.Cantidad} x {nombreProducto}{descripcionVariante} (${detalle.PrecioUnitario} c/u)");
 
                 var extras = detalle.ProductosExtra?
                     .Select(e => e.ProductoExtra?.Nombre)

@@ -18,6 +18,10 @@ namespace Vinto.Api.Data
         public DbSet<DetallePedidoExtra> DetallePedidoExtras { get; set; }
         public DbSet<ComentarioPedido> ComentariosPedido { get; set; }
         public DbSet<Imagen> Imagenes { get; set; }
+        public DbSet<TipoVariante> TiposVariante { get; set; }
+        public DbSet<OpcionVariante> OpcionesVariante { get; set; }
+        public DbSet<VarianteProducto> VariantesProducto { get; set; }
+        public DbSet<MovimientoStock> MovimientosStock { get; set; }
 
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -176,6 +180,77 @@ namespace Vinto.Api.Data
 
             modelBuilder.Entity<Imagen>()
                 .HasIndex(i => new { i.AdministradorId, i.Tipo, i.EntidadId });
+
+            // ---------------- Variantes ----------------
+
+            // Producto (1) - (N) TipoVariante
+            modelBuilder.Entity<TipoVariante>()
+                .HasOne(t => t.Producto)
+                .WithMany(p => p.TiposVariante)
+                .HasForeignKey(t => t.ProductoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // TipoVariante (1) - (N) OpcionVariante
+            modelBuilder.Entity<OpcionVariante>()
+                .HasOne(o => o.TipoVariante)
+                .WithMany(t => t.Opciones)
+                .HasForeignKey(o => o.TipoVarianteId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Producto (1) - (N) VarianteProducto
+            modelBuilder.Entity<VarianteProducto>()
+                .HasOne(v => v.Producto)
+                .WithMany(p => p.Variantes)
+                .HasForeignKey(v => v.ProductoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // OpcionVariante (1) - (N) VarianteProducto via Opcion1
+            modelBuilder.Entity<VarianteProducto>()
+                .HasOne(v => v.Opcion1)
+                .WithMany()
+                .HasForeignKey(v => v.Opcion1Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // OpcionVariante (1) - (N) VarianteProducto via Opcion2 (nullable)
+            modelBuilder.Entity<VarianteProducto>()
+                .HasOne(v => v.Opcion2)
+                .WithMany()
+                .HasForeignKey(v => v.Opcion2Id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // VarianteProducto (1) - (N) DetallePedido
+            modelBuilder.Entity<DetallePedido>()
+                .HasOne(d => d.VarianteProducto)
+                .WithMany()
+                .HasForeignKey(d => d.VarianteProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // ---------------- MovimientoStock ----------------
+
+            modelBuilder.Entity<MovimientoStock>()
+                .HasOne(m => m.Administrador)
+                .WithMany()
+                .HasForeignKey(m => m.AdministradorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MovimientoStock>()
+                .HasOne(m => m.Producto)
+                .WithMany()
+                .HasForeignKey(m => m.ProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MovimientoStock>()
+                .HasOne(m => m.VarianteProducto)
+                .WithMany()
+                .HasForeignKey(m => m.VarianteProductoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<MovimientoStock>()
+                .Property(m => m.FechaCreacion)
+                .HasDefaultValueSql("GETUTCDATE()");
+
+            // Precisión monetaria
+            modelBuilder.Entity<VarianteProducto>().Property(v => v.Precio).HasPrecision(18, 2);
 
             // ---------------- (Opcional) Filtros globales multi-tenant ----------------
             // Si inyectás ITenantProvider en el DbContext (constructor), activá:

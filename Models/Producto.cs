@@ -30,5 +30,12 @@ namespace Vinto.Api.Models
 
         public ICollection<ProductoExtra> Extras { get; set; }
 
+        public bool TieneVariantes { get; set; } = false;
+
+        public int? Stock { get; set; }
+
+        public ICollection<TipoVariante> TiposVariante { get; set; } = new List<TipoVariante>();
+
+        public ICollection<VarianteProducto> Variantes { get; set; } = new List<VarianteProducto>();
     }
 }

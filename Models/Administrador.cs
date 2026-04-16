@@ -60,5 +60,9 @@ namespace Vinto.Api.Models
         public string ZonaEnvio { get; set; } = "Nacional"; // "Ciudad" or "Nacional"
 
         public decimal? CostoEnvio { get; set; }
+
+        public int? StockBajoAlerta { get; set; } = 5;
+
+        public bool AutoDeshabilitarSinStock { get; set; } = false;
     }
 }

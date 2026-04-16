@@ -5,6 +5,7 @@ namespace Vinto.Api.DTOs
         public int ProductoId { get; set; }
         public int Cantidad { get; set; }
         public List<int>? ExtrasSeleccionados { get; set; }
+        public int? VarianteProductoId { get; set; }
     }
 }
 
