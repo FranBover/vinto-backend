@@ -117,6 +117,11 @@ namespace Vinto.Api.Services.Implementaciones
             await _varianteRepo.Eliminar(id);
         }
 
+        public async Task EliminarTodas(int productoId)
+        {
+            await _varianteRepo.EliminarTodas(productoId);
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────────
 
         private static VarianteProductoResponseDTO MapToDto(VarianteProducto v)

@@ -71,6 +71,12 @@ namespace Vinto.Api.Controllers
                 .Include(p => p.Detalles)
                     .ThenInclude(d => d.ProductosExtra)
                         .ThenInclude(e => e.ProductoExtra)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion1)
+                .Include(p => p.Detalles)
+                    .ThenInclude(d => d.VarianteProducto)
+                        .ThenInclude(v => v!.Opcion2)
                 .FirstOrDefaultAsync(p => p.Id == id && p.AdministradorId == adminId);
 
             if (pedido == null)
@@ -97,6 +103,11 @@ namespace Vinto.Api.Controllers
                 Detalles = pedido.Detalles.Select(d => new PedidoDetalleResponseDTO
                 {
                     NombreProducto = d.Producto?.Nombre ?? string.Empty,
+                    VarianteDescripcion = d.VarianteProducto != null
+                        ? (d.VarianteProducto.Opcion2 != null
+                            ? $"{d.VarianteProducto.Opcion1.Valor} / {d.VarianteProducto.Opcion2.Valor}"
+                            : d.VarianteProducto.Opcion1.Valor)
+                        : null,
                     Cantidad = d.Cantidad,
                     PrecioUnitario = d.PrecioUnitario,
                     Extras = d.ProductosExtra.Select(e => new PedidoDetalleExtraResponseDTO

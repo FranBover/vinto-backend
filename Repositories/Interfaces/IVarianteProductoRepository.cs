@@ -9,5 +9,6 @@ namespace Vinto.Api.Repositories.Interfaces
         Task CrearRango(IEnumerable<VarianteProducto> variantes);
         Task Actualizar(VarianteProducto variante);
         Task Eliminar(int id);
+        Task EliminarTodas(int productoId);
     }
 }

@@ -51,5 +51,12 @@ namespace Vinto.Api.Repositories.Implementaciones
                 await _context.SaveChangesAsync();
             }
         }
+
+        public async Task EliminarTodas(int productoId)
+        {
+            await _context.VariantesProducto
+                .Where(v => v.ProductoId == productoId)
+                .ExecuteDeleteAsync();
+        }
     }
 }

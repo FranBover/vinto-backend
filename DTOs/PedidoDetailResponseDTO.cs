@@ -28,6 +28,7 @@ namespace Vinto.Api.DTOs
     public class PedidoDetalleResponseDTO
     {
         public string NombreProducto { get; set; } = string.Empty;
+        public string? VarianteDescripcion { get; set; }
         public int Cantidad { get; set; }
         public decimal PrecioUnitario { get; set; }
         public List<PedidoDetalleExtraResponseDTO> Extras { get; set; } = new();

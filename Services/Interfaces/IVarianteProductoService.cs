@@ -10,5 +10,6 @@ namespace Vinto.Api.Services.Interfaces
         Task<(string? error, IEnumerable<VarianteProductoResponseDTO>? variantes)> Generar(int productoId);
         Task Actualizar(VarianteProducto variante);
         Task Eliminar(int id);
+        Task EliminarTodas(int productoId);
     }
 }

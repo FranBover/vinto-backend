@@ -83,6 +83,21 @@ namespace Vinto.Api.Controllers
             return NoContent();
         }
 
+        // DELETE api/Productos/{productoId}/variantes
+        [HttpDelete("api/Productos/{productoId}/variantes")]
+        public async Task<IActionResult> DeleteTodas(int productoId)
+        {
+            if (!TryGetAdminId(out int adminId))
+                return Forbid();
+
+            var producto = await _productoService.ObtenerPorId(productoId);
+            if (producto == null) return NotFound("Producto no encontrado.");
+            if (producto.AdministradorId != adminId) return Forbid();
+
+            await _varianteService.EliminarTodas(productoId);
+            return NoContent();
+        }
+
         // DELETE api/Variantes/{varianteId}
         [HttpDelete("api/Variantes/{varianteId}")]
         public async Task<IActionResult> Delete(int varianteId)
