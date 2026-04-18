@@ -142,14 +142,10 @@ namespace Vinto.Api.Controllers
             if (string.IsNullOrWhiteSpace(dto.Estado) || !estadosValidos.Contains(dto.Estado))
                 return BadRequest("Estado inválido.");
 
-            var pedido = await _context.Pedidos
-                .FirstOrDefaultAsync(p => p.Id == id && p.AdministradorId == adminId);
+            var (encontrado, error) = await _pedidoService.CambiarEstado(id, dto.Estado.Trim(), adminId);
 
-            if (pedido == null)
-                return NotFound();
-
-            pedido.Estado = dto.Estado.Trim();
-            await _context.SaveChangesAsync();
+            if (!encontrado) return NotFound();
+            if (error != null) return BadRequest(error);
 
             return NoContent();
         }

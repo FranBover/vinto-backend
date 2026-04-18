@@ -22,5 +22,11 @@ namespace Vinto.Api.Services.Interfaces
 
         Task<ComandaResponseDTO?> GetComandaAsync(int pedidoId, int adminId);
         Task<TicketResponseDTO?> GetTicketAsync(int pedidoId, int adminId);
+
+        /// <summary>
+        /// Cambia el estado del pedido aplicando la lógica de stock correspondiente.
+        /// Returns: (encontrado, errorMessage). Si encontrado=false → 404. Si errorMessage≠null → 400.
+        /// </summary>
+        Task<(bool encontrado, string? error)> CambiarEstado(int pedidoId, string nuevoEstado, int adminId);
     }
 }

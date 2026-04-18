@@ -15,12 +15,21 @@ namespace Vinto.Api.Services.Implementaciones
         private readonly AppDbContext _context;
         private readonly IPedidoRepository _pedidoRepository;
         private readonly IHubContext<PedidosHub> _hubContext;
+        private readonly IStockService _stockService;
+        private readonly ILogger<PedidoService> _logger;
 
-        public PedidoService(IPedidoRepository pedidoRepository, AppDbContext context, IHubContext<PedidosHub> hubContext)
+        public PedidoService(
+            IPedidoRepository pedidoRepository,
+            AppDbContext context,
+            IHubContext<PedidosHub> hubContext,
+            IStockService stockService,
+            ILogger<PedidoService> logger)
         {
             _pedidoRepository = pedidoRepository;
             _context = context;
             _hubContext = hubContext;
+            _stockService = stockService;
+            _logger = logger;
         }
 
         public async Task<IEnumerable<Pedido>> ObtenerTodos()
@@ -443,6 +452,74 @@ namespace Vinto.Api.Services.Implementaciones
                 MontoPagoEfectivo = pedido.MontoPagoEfectivo,
                 Vuelto = vuelto
             };
+        }
+
+        public async Task<(bool encontrado, string? error)> CambiarEstado(int pedidoId, string nuevoEstado, int adminId)
+        {
+            var pedido = await _context.Pedidos
+                .Include(p => p.Detalles)
+                .FirstOrDefaultAsync(p => p.Id == pedidoId && p.AdministradorId == adminId);
+
+            if (pedido == null)
+                return (false, null);
+
+            var estadoAnterior = pedido.Estado;
+            var codigo = $"PED-{pedido.Id:D6}";
+
+            if (nuevoEstado == "Confirmado")
+            {
+                await using var transaction = await _context.Database.BeginTransactionAsync();
+                try
+                {
+                    foreach (var detalle in pedido.Detalles)
+                    {
+                        await _stockService.DescontarStock(
+                            detalle.ProductoId,
+                            detalle.VarianteProductoId,
+                            detalle.Cantidad,
+                            $"Pedido #{codigo}",
+                            adminId);
+                    }
+
+                    pedido.Estado = nuevoEstado;
+                    await _context.SaveChangesAsync();
+                    await transaction.CommitAsync();
+                }
+                catch (InvalidOperationException ex)
+                {
+                    await transaction.RollbackAsync();
+                    return (true, ex.Message);
+                }
+            }
+            else if (nuevoEstado == "Cancelado" && estadoAnterior == "Confirmado")
+            {
+                foreach (var detalle in pedido.Detalles)
+                {
+                    try
+                    {
+                        await _stockService.ReponerStock(
+                            detalle.ProductoId,
+                            detalle.VarianteProductoId,
+                            detalle.Cantidad,
+                            $"Cancelación pedido #{codigo}",
+                            adminId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogError(ex, "Error al reponer stock para detalle {DetalleId} del pedido {PedidoId}", detalle.Id, pedidoId);
+                    }
+                }
+
+                pedido.Estado = nuevoEstado;
+                await _context.SaveChangesAsync();
+            }
+            else
+            {
+                pedido.Estado = nuevoEstado;
+                await _context.SaveChangesAsync();
+            }
+
+            return (true, null);
         }
 
         private static string Slugify(string value)

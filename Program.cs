@@ -68,6 +68,7 @@ builder.Services.AddScoped<IDetallePedidoExtraRepository, DetallePedidoExtraRepo
 builder.Services.AddScoped<ITipoVarianteRepository, TipoVarianteRepository>();
 builder.Services.AddScoped<IOpcionVarianteRepository, OpcionVarianteRepository>();
 builder.Services.AddScoped<IVarianteProductoRepository, VarianteProductoRepository>();
+builder.Services.AddScoped<IStockRepository, StockRepository>();
 
 // Servicios
 
@@ -81,6 +82,7 @@ builder.Services.AddScoped<IDetallePedidoExtraService, DetallePedidoExtraService
 builder.Services.AddScoped<ITipoVarianteService, TipoVarianteService>();
 builder.Services.AddScoped<IOpcionVarianteService, OpcionVarianteService>();
 builder.Services.AddScoped<IVarianteProductoService, VarianteProductoService>();
+builder.Services.AddScoped<IStockService, StockService>();
 
 
 
