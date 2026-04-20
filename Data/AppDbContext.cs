@@ -23,6 +23,12 @@ namespace Vinto.Api.Data
         public DbSet<VarianteProducto> VariantesProducto { get; set; }
         public DbSet<MovimientoStock> MovimientosStock { get; set; }
 
+        public DbSet<Descuento> Descuentos { get; set; }
+        public DbSet<Cupon> Cupones { get; set; }
+        public DbSet<UsoCupon> UsosCupones { get; set; }
+        public DbSet<DetallePedidoDescuento> DetallePedidoDescuentos { get; set; }
+        public DbSet<PreviewActualizacionPrecios> PreviewsActualizacionPrecios { get; set; }
+        public DbSet<PreviewActualizacionPreciosItem> PreviewActualizacionPreciosItems { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -257,6 +263,170 @@ namespace Vinto.Api.Data
             // modelBuilder.Entity<Categoria>().HasQueryFilter(c => c.AdministradorId == _tenant.AdministradorId);
             // modelBuilder.Entity<Producto>().HasQueryFilter(p => p.AdministradorId == _tenant.AdministradorId);
             // modelBuilder.Entity<Pedido>().HasQueryFilter(p => p.AdministradorId == _tenant.AdministradorId);
+
+            // ---------------- Descuento ----------------
+            modelBuilder.Entity<Descuento>()
+                .HasOne(d => d.Administrador)
+                .WithMany()
+                .HasForeignKey(d => d.AdministradorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Descuento>()
+                .HasOne(d => d.Producto)
+                .WithMany()
+                .HasForeignKey(d => d.ProductoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Descuento>()
+                .HasOne(d => d.Categoria)
+                .WithMany()
+                .HasForeignKey(d => d.CategoriaId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<Descuento>()
+                .Property(d => d.Valor).HasPrecision(18, 2);
+
+            modelBuilder.Entity<Descuento>()
+                .Property(d => d.FechaCreacion).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<Descuento>()
+                .HasIndex(d => new { d.AdministradorId, d.Activo });
+
+            // ---------------- Cupon ----------------
+            modelBuilder.Entity<Cupon>()
+                .HasOne(c => c.Administrador)
+                .WithMany()
+                .HasForeignKey(c => c.AdministradorId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Cupon>()
+                .Property(c => c.Valor).HasPrecision(18, 2);
+
+            modelBuilder.Entity<Cupon>()
+                .Property(c => c.PedidoMinimo).HasPrecision(18, 2);
+
+            modelBuilder.Entity<Cupon>()
+                .Property(c => c.FechaCreacion).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<Cupon>()
+                .HasIndex(c => new { c.AdministradorId, c.Codigo })
+                .IsUnique();
+
+            // ---------------- Pedido → Cupon ----------------
+            modelBuilder.Entity<Pedido>()
+                .HasOne(p => p.Cupon)
+                .WithMany()
+                .HasForeignKey(p => p.CuponId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<Pedido>()
+                .Property(p => p.SubtotalSinDescuentos).HasPrecision(18, 2).HasDefaultValue(0m);
+
+            modelBuilder.Entity<Pedido>()
+                .Property(p => p.MontoDescuentoProductos).HasPrecision(18, 2).HasDefaultValue(0m);
+
+            modelBuilder.Entity<Pedido>()
+                .Property(p => p.MontoDescuentoCupon).HasPrecision(18, 2).HasDefaultValue(0m);
+
+            // ---------------- UsoCupon ----------------
+            modelBuilder.Entity<UsoCupon>()
+                .HasOne(u => u.Cupon)
+                .WithMany()
+                .HasForeignKey(u => u.CuponId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<UsoCupon>()
+                .HasOne(u => u.Pedido)
+                .WithMany()
+                .HasForeignKey(u => u.PedidoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<UsoCupon>()
+                .Property(u => u.MontoDescontado).HasPrecision(18, 2);
+
+            modelBuilder.Entity<UsoCupon>()
+                .Property(u => u.FechaUso).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<UsoCupon>()
+                .HasIndex(u => u.CuponId);
+
+            modelBuilder.Entity<UsoCupon>()
+                .HasIndex(u => u.PedidoId);
+
+            // ---------------- DetallePedidoDescuento ----------------
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .HasOne(d => d.Pedido)
+                .WithMany()
+                .HasForeignKey(d => d.PedidoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .HasOne(d => d.DetallePedido)
+                .WithMany()
+                .HasForeignKey(d => d.DetallePedidoId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .HasOne(d => d.Descuento)
+                .WithMany()
+                .HasForeignKey(d => d.DescuentoId)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .Property(d => d.MontoDescontado).HasPrecision(18, 2);
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .Property(d => d.FechaCreacion).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .HasIndex(d => d.PedidoId);
+
+            modelBuilder.Entity<DetallePedidoDescuento>()
+                .HasIndex(d => d.DetallePedidoId);
+
+            // ---------------- PreviewActualizacionPrecios ----------------
+            modelBuilder.Entity<PreviewActualizacionPrecios>()
+                .HasOne(p => p.Administrador)
+                .WithMany()
+                .HasForeignKey(p => p.AdministradorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PreviewActualizacionPrecios>()
+                .HasOne(p => p.Categoria)
+                .WithMany()
+                .HasForeignKey(p => p.CategoriaId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PreviewActualizacionPrecios>()
+                .Property(p => p.Valor).HasPrecision(18, 2);
+
+            modelBuilder.Entity<PreviewActualizacionPrecios>()
+                .Property(p => p.FechaCreacion).HasDefaultValueSql("GETUTCDATE()");
+
+            modelBuilder.Entity<PreviewActualizacionPrecios>()
+                .HasIndex(p => new { p.AdministradorId, p.Aplicado });
+
+            // ---------------- PreviewActualizacionPreciosItem ----------------
+            modelBuilder.Entity<PreviewActualizacionPreciosItem>()
+                .HasOne(i => i.Preview)
+                .WithMany(p => p.Items)
+                .HasForeignKey(i => i.PreviewId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PreviewActualizacionPreciosItem>()
+                .HasOne(i => i.Producto)
+                .WithMany()
+                .HasForeignKey(i => i.ProductoId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<PreviewActualizacionPreciosItem>()
+                .Property(i => i.PrecioActual).HasPrecision(18, 2);
+
+            modelBuilder.Entity<PreviewActualizacionPreciosItem>()
+                .Property(i => i.PrecioNuevo).HasPrecision(18, 2);
+
+            modelBuilder.Entity<PreviewActualizacionPreciosItem>()
+                .HasIndex(i => i.PreviewId);
         }
 
     }

@@ -46,6 +46,23 @@ namespace Vinto.Api.Models
         [Required, Precision(18, 2)]
         public decimal Total { get; set; }
 
+        [Precision(18, 2)]
+        public decimal SubtotalSinDescuentos { get; set; } = 0;
+
+        [Precision(18, 2)]
+        public decimal MontoDescuentoProductos { get; set; } = 0;
+
+        [Precision(18, 2)]
+        public decimal MontoDescuentoCupon { get; set; } = 0;
+
+        public int? CuponId { get; set; }
+
+        [ForeignKey("CuponId")]
+        public Cupon? Cupon { get; set; }
+
+        [MaxLength(30)]
+        public string? CodigoCupon { get; set; }
+
         public ICollection<DetallePedido> Detalles { get; set; } = new List<DetallePedido>();
     }
 }
