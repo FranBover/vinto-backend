@@ -93,14 +93,12 @@ namespace Vinto.Api.Controllers
 
             var umbral = await _stockRepository.ObtenerUmbralAlerta(adminId.Value);
 
-            var productosTask = _stockRepository.ObtenerProductosStockBajo(adminId.Value, umbral);
-            var variantesTask = _stockRepository.ObtenerVariantesStockBajo(adminId.Value, umbral);
-
-            await Task.WhenAll(productosTask, variantesTask);
+            var productos = await _stockRepository.ObtenerProductosStockBajo(adminId.Value, umbral);
+            var variantes = await _stockRepository.ObtenerVariantesStockBajo(adminId.Value, umbral);
 
             var alertas = new List<StockAlertaDTO>();
 
-            foreach (var p in productosTask.Result)
+            foreach (var p in productos)
             {
                 alertas.Add(new StockAlertaDTO
                 {
@@ -113,7 +111,7 @@ namespace Vinto.Api.Controllers
                 });
             }
 
-            foreach (var v in variantesTask.Result)
+            foreach (var v in variantes)
             {
                 alertas.Add(new StockAlertaDTO
                 {
@@ -131,13 +129,10 @@ namespace Vinto.Api.Controllers
 
         private async Task<StockResponseDTO?> BuildStockResponse(int productoId, int adminId)
         {
-            var productoTask = _stockRepository.ObtenerProductoParaStock(productoId, adminId);
-            var movimientosTask = _stockRepository.ObtenerUltimosMovimientos(productoId, adminId, 20);
-
-            await Task.WhenAll(productoTask, movimientosTask);
-
-            var producto = productoTask.Result;
+            var producto = await _stockRepository.ObtenerProductoParaStock(productoId, adminId);
             if (producto == null) return null;
+
+            var movimientos = await _stockRepository.ObtenerUltimosMovimientos(productoId, adminId, 20);
 
             var dto = new StockResponseDTO
             {
@@ -154,7 +149,7 @@ namespace Vinto.Api.Controllers
                         Disponible = v.Disponible
                     }).ToList()
                     : null,
-                UltimosMovimientos = movimientosTask.Result.Select(m => new MovimientoStockDTO
+                UltimosMovimientos = movimientos.Select(m => new MovimientoStockDTO
                 {
                     Id = m.Id,
                     Tipo = m.Tipo,

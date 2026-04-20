@@ -103,10 +103,8 @@ public class StockService : IStockService
         }
         else
         {
-            if (producto.Stock == null) return;
-
-            int stockAnterior = producto.Stock.Value;
-            producto.Stock += cantidad;
+            int stockAnterior = producto.Stock ?? 0;
+            producto.Stock = stockAnterior + cantidad;
 
             await _stockRepository.RegistrarMovimiento(new MovimientoStock
             {
@@ -155,9 +153,7 @@ public class StockService : IStockService
         }
         else
         {
-            if (producto.Stock == null) return;
-
-            int stockAnterior = producto.Stock.Value;
+            int stockAnterior = producto.Stock ?? 0;
             producto.Stock = nuevoStock;
 
             if (nuevoStock == 0 && producto.Administrador.AutoDeshabilitarSinStock)
