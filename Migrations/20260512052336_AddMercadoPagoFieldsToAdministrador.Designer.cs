@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Vinto.Api.Data;
 
@@ -11,9 +12,11 @@ using Vinto.Api.Data;
 namespace Vinto.Api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260512052336_AddMercadoPagoFieldsToAdministrador")]
+    partial class AddMercadoPagoFieldsToAdministrador
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -556,54 +559,6 @@ namespace Vinto.Api.Migrations
                     b.ToTable("OpcionesVariante");
                 });
 
-            modelBuilder.Entity("Vinto.Api.Models.PagoMercadoPago", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<DateTime>("FechaEvento")
-                        .HasColumnType("datetime2");
-
-                    b.Property<decimal>("Monto")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("decimal(18,2)");
-
-                    b.Property<string>("PaymentId")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<int>("PedidoId")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("ProcesadoConExito")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("RawWebhookData")
-                        .HasColumnType("nvarchar(max)");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("StatusDetail")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("PedidoId");
-
-                    b.HasIndex("PaymentId", "Status")
-                        .IsUnique();
-
-                    b.ToTable("PagosMercadoPago");
-                });
-
             modelBuilder.Entity("Vinto.Api.Models.Pedido", b =>
                 {
                     b.Property<int>("Id")
@@ -616,10 +571,6 @@ namespace Vinto.Api.Migrations
                         .HasColumnType("int");
 
                     b.Property<string>("CodigoCupon")
-                        .HasMaxLength(30)
-                        .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("CodigoSeguimiento")
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
 
@@ -650,29 +601,6 @@ namespace Vinto.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(30)
                         .HasColumnType("nvarchar(30)");
-
-                    b.Property<string>("MercadoPagoCollectionId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<DateTime?>("MercadoPagoFechaPago")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("MercadoPagoPaymentId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("MercadoPagoPreferenceId")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.Property<string>("MercadoPagoStatus")
-                        .HasMaxLength(50)
-                        .HasColumnType("nvarchar(50)");
-
-                    b.Property<string>("MercadoPagoStatusDetail")
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
 
                     b.Property<decimal>("MontoDescuentoCupon")
                         .ValueGeneratedOnAdd()
@@ -1169,17 +1097,6 @@ namespace Vinto.Api.Migrations
                         .IsRequired();
 
                     b.Navigation("TipoVariante");
-                });
-
-            modelBuilder.Entity("Vinto.Api.Models.PagoMercadoPago", b =>
-                {
-                    b.HasOne("Vinto.Api.Models.Pedido", "Pedido")
-                        .WithMany()
-                        .HasForeignKey("PedidoId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Pedido");
                 });
 
             modelBuilder.Entity("Vinto.Api.Models.Pedido", b =>

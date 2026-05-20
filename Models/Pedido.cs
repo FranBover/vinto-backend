@@ -22,6 +22,9 @@ namespace Vinto.Api.Models
 
         [Required, MaxLength(30)]
         public string Estado { get; set; } = "Pendiente";
+
+        [MaxLength(30)]
+        public string? CodigoSeguimiento { get; set; }
         [Required, MaxLength(120)]
         public string NombreCliente { get; set; } = string.Empty;
         [Required]
@@ -64,5 +67,23 @@ namespace Vinto.Api.Models
         public string? CodigoCupon { get; set; }
 
         public ICollection<DetallePedido> Detalles { get; set; } = new List<DetallePedido>();
+
+        // MercadoPago - pago de este pedido
+        [MaxLength(100)]
+        public string? MercadoPagoPreferenceId { get; set; }
+
+        [MaxLength(100)]
+        public string? MercadoPagoPaymentId { get; set; }
+
+        [MaxLength(50)]
+        public string? MercadoPagoStatus { get; set; }
+
+        [MaxLength(100)]
+        public string? MercadoPagoStatusDetail { get; set; }
+
+        public DateTime? MercadoPagoFechaPago { get; set; }
+
+        [MaxLength(100)]
+        public string? MercadoPagoCollectionId { get; set; }
     }
 }

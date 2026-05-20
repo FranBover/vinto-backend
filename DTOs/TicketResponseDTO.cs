@@ -14,6 +14,10 @@ namespace Vinto.Api.DTOs
         public string? ReferenciaDireccion { get; set; }
         public string FormaPago { get; set; } = string.Empty;
         public List<TicketItemDTO> Items { get; set; } = new();
+        public decimal SubtotalSinDescuentos { get; set; }
+        public decimal MontoDescuentoProductos { get; set; }
+        public decimal MontoDescuentoCupon { get; set; }
+        public string? CodigoCupon { get; set; }
         public decimal Subtotal { get; set; }
         public decimal CostoEnvio { get; set; }
         public decimal Total { get; set; }

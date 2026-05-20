@@ -64,5 +64,23 @@ namespace Vinto.Api.Models
         public int? StockBajoAlerta { get; set; } = 5;
 
         public bool AutoDeshabilitarSinStock { get; set; } = false;
+
+        // MercadoPago OAuth
+        [MaxLength(50)]
+        public string? MercadoPagoUserId { get; set; }
+
+        // Estos dos tokens se guardan CIFRADOS, por eso 500 chars (el cifrado los alarga)
+        [MaxLength(500)]
+        public string? MercadoPagoAccessToken { get; set; }
+
+        [MaxLength(500)]
+        public string? MercadoPagoRefreshToken { get; set; }
+
+        [MaxLength(100)]
+        public string? MercadoPagoPublicKey { get; set; }
+
+        public DateTime? MercadoPagoTokenExpiresAt { get; set; }
+
+        public bool MercadoPagoConectado { get; set; } = false;
     }
 }

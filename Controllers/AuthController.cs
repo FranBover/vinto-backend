@@ -87,9 +87,6 @@ namespace Vinto.Api.Controllers
 
         private string GenerateToken(Administrador admin)
         {
-            Console.WriteLine("SecretKey cargada: " + _jwtSettings.Key); // Debug
-
-
             var claims = new[]
             {
                 new Claim(JwtRegisteredClaimNames.Sub, admin.Email),

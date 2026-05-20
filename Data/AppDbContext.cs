@@ -30,6 +30,8 @@ namespace Vinto.Api.Data
         public DbSet<PreviewActualizacionPrecios> PreviewsActualizacionPrecios { get; set; }
         public DbSet<PreviewActualizacionPreciosItem> PreviewActualizacionPreciosItems { get; set; }
 
+        public DbSet<PagoMercadoPago> PagosMercadoPago => Set<PagoMercadoPago>();
+
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -427,6 +429,17 @@ namespace Vinto.Api.Data
 
             modelBuilder.Entity<PreviewActualizacionPreciosItem>()
                 .HasIndex(i => i.PreviewId);
+
+            // ---------------- PagoMercadoPago ----------------
+            modelBuilder.Entity<PagoMercadoPago>()
+                .HasIndex(p => new { p.PaymentId, p.Status })
+                .IsUnique();
+
+            modelBuilder.Entity<PagoMercadoPago>()
+                .HasOne(p => p.Pedido)
+                .WithMany()
+                .HasForeignKey(p => p.PedidoId)
+                .OnDelete(DeleteBehavior.Restrict);
         }
 
     }

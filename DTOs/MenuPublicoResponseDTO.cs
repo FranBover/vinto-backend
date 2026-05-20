@@ -28,10 +28,26 @@ namespace Vinto.Api.DTOs
         public List<OpcionVarianteMenuDTO> Opciones { get; set; } = new();
     }
 
+    public class DescuentoMenuItemDTO
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Tipo { get; set; } = string.Empty;
+    }
+
+    public class DescuentoPedidoCompletoMenuDTO
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Tipo { get; set; } = string.Empty;
+        public decimal Valor { get; set; }
+    }
+
     public class VarianteMenuDTO
     {
         public int Id { get; set; }
         public decimal Precio { get; set; }
+        public decimal PrecioConDescuento { get; set; }
+        public int PorcentajeDescuentoTotal { get; set; }
+        public List<DescuentoMenuItemDTO> DescuentosAplicados { get; set; } = new();
         public int? Stock { get; set; }
         public bool Disponible { get; set; }
         public int Opcion1Id { get; set; }
@@ -45,6 +61,9 @@ namespace Vinto.Api.DTOs
         public string Nombre { get; set; } = string.Empty;
         public string? Descripcion { get; set; }
         public decimal? Precio { get; set; }
+        public decimal? PrecioConDescuento { get; set; }
+        public int PorcentajeDescuentoTotal { get; set; }
+        public List<DescuentoMenuItemDTO> DescuentosAplicados { get; set; } = new();
         public string? ImagenUrl { get; set; }
         public bool Disponible { get; set; }
         public bool TieneVariantes { get; set; }
@@ -76,11 +95,13 @@ namespace Vinto.Api.DTOs
         public string? UbicacionUrl { get; set; }
         public string ZonaEnvio { get; set; } = "Nacional";
         public decimal? CostoEnvio { get; set; }
+        public bool MercadoPagoHabilitado { get; set; }
     }
 
     public class MenuPublicoResponseDTO
     {
         public LocalInfoDTO Local { get; set; } = null!;
         public List<CategoriaMenuDTO> Categorias { get; set; } = new();
+        public List<DescuentoPedidoCompletoMenuDTO> DescuentosPedidoCompleto { get; set; } = new();
     }
 }

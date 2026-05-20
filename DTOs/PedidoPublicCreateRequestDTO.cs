@@ -10,6 +10,7 @@ namespace Vinto.Api.DTOs
         public string? DireccionCliente { get; set; }
         public string? ReferenciaDireccion { get; set; }
         public string? UbicacionUrl { get; set; }
+        public string? CodigoCupon { get; set; }
         public List<PedidoDetalleCreateDTO> Detalles { get; set; } = new();
     }
 }

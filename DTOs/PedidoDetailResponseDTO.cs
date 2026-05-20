@@ -20,9 +20,22 @@ namespace Vinto.Api.DTOs
         public string? ReferenciaDireccion { get; set; }
         public string? UbicacionUrl { get; set; }
 
+        public decimal SubtotalSinDescuentos { get; set; }
+        public decimal MontoDescuentoProductos { get; set; }
+        public decimal MontoDescuentoCupon { get; set; }
+        public string? CodigoCupon { get; set; }
+        public decimal Subtotal { get; set; }
+        public decimal CostoEnvio { get; set; }
         public decimal Total { get; set; }
 
         public List<PedidoDetalleResponseDTO> Detalles { get; set; } = new();
+
+        public string? MercadoPagoPaymentId { get; set; }
+        public string? MercadoPagoStatus { get; set; }
+        public string? MercadoPagoStatusDetail { get; set; }
+        public DateTime? MercadoPagoFechaPago { get; set; }
+        public string? MercadoPagoPreferenceId { get; set; }
+        public string? MercadoPagoCollectionId { get; set; }
     }
 
     public class PedidoDetalleResponseDTO

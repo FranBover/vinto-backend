@@ -5,6 +5,7 @@ using Vinto.Api.Services.Interfaces;
 using Vinto.Api.Services.Implementaciones;
 using Vinto.Api.Hubs;
 using Vinto.Api.Storage;
+using Vinto.Api.Helpers;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
@@ -70,6 +71,7 @@ builder.Services.AddScoped<IOpcionVarianteRepository, OpcionVarianteRepository>(
 builder.Services.AddScoped<IVarianteProductoRepository, VarianteProductoRepository>();
 builder.Services.AddScoped<IStockRepository, StockRepository>();
 builder.Services.AddScoped<IDescuentoRepository, DescuentoRepository>();
+builder.Services.AddScoped<ICuponRepository, CuponRepository>();
 
 // Servicios
 
@@ -85,8 +87,18 @@ builder.Services.AddScoped<IOpcionVarianteService, OpcionVarianteService>();
 builder.Services.AddScoped<IVarianteProductoService, VarianteProductoService>();
 builder.Services.AddScoped<IStockService, StockService>();
 builder.Services.AddScoped<IDescuentoService, DescuentoService>();
+builder.Services.AddScoped<ICuponService, CuponService>();
+builder.Services.AddScoped<IDescuentoCalculatorService, DescuentoCalculatorService>();
+builder.Services.AddScoped<IMercadoPagoService, MercadoPagoService>();
 
 
+
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient();
+
+// Encryption
+builder.Services.AddSingleton<IEncryptionHelper, EncryptionHelper>();
+builder.Services.AddSingleton<IMercadoPagoSignatureValidator, MercadoPagoSignatureValidator>();
 
 // Storage
 builder.Services.AddScoped<IStorageProvider, LocalStorageProvider>();
