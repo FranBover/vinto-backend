@@ -135,6 +135,30 @@ builder.Services.AddSwaggerGen(options =>
             new string[] {}
         }
     });
+
+    options.AddSecurityDefinition("X-Admin-Key", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "X-Admin-Key",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.ApiKey,
+        Scheme = "ApiKeyScheme",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Clave de registro de admins (solo usar para POST /api/Auth/register)"
+    });
+
+    options.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "X-Admin-Key"
+                }
+            },
+            new string[] {}
+        }
+    });
 });
 
 // CORS

@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using MercadoPago.Client.Common;
 using MercadoPago.Client.Preference;
 using Microsoft.AspNetCore.SignalR;
 using Vinto.Api.Hubs;
@@ -37,6 +38,7 @@ namespace Vinto.Api.Services.Implementaciones
         private readonly string _authBaseUrl;
         private readonly string _apiBaseUrl;
         private readonly string _frontendClientUrl;
+        private readonly string _backendUrl;
 
         private const string StateCachePrefix = "mp_oauth_state:";
         private static readonly TimeSpan StateTtl = TimeSpan.FromMinutes(10);
@@ -73,6 +75,7 @@ namespace Vinto.Api.Services.Implementaciones
                 ?? throw new InvalidOperationException("MercadoPago:ApiBaseUrl no configurado");
             _frontendClientUrl = configuration["MercadoPago:FrontendClientUrl"]
                 ?? throw new InvalidOperationException("MercadoPago:FrontendClientUrl no configurado");
+            _backendUrl = configuration["MercadoPago:BackendUrl"] ?? "";
         }
 
         public Task<OAuthUrlResponseDTO> GenerarUrlAutorizacion(int adminId)
@@ -243,20 +246,60 @@ namespace Vinto.Api.Services.Implementaciones
                 throw new InvalidOperationException("No se pudo descifrar el token de MercadoPago del local. Reconectá MP.");
             }
 
-            // 8. Construir la preferencia
+            // 8. Construir items de la preferencia
+            var items = new List<PreferenceItemRequest>();
+            bool tieneDescuentos = pedido.MontoDescuentoProductos > 0 || pedido.MontoDescuentoCupon > 0;
+
+            if (!tieneDescuentos)
+            {
+                foreach (var detalle in pedido.Detalles)
+                {
+                    var nombreProducto = detalle.Producto?.Nombre ?? "Producto";
+                    items.Add(new PreferenceItemRequest
+                    {
+                        Id = detalle.Producto?.Id.ToString() ?? "0",
+                        Title = nombreProducto,
+                        Description = nombreProducto,
+                        CategoryId = "food",
+                        Quantity = detalle.Cantidad,
+                        UnitPrice = detalle.PrecioUnitario,
+                        CurrencyId = "ARS",
+                    });
+                }
+            }
+            else
+            {
+                var descripcionProductos = string.Join(", ", pedido.Detalles
+                    .Select(d => $"{d.Cantidad}x {d.Producto?.Nombre ?? "Producto"}"));
+
+                items.Add(new PreferenceItemRequest
+                {
+                    Id = $"pedido-{pedido.Id}",
+                    Title = $"Pedido #{pedido.Id} - {admin.NombreLocal}",
+                    Description = descripcionProductos.Length > 250
+                        ? descripcionProductos.Substring(0, 247) + "..."
+                        : descripcionProductos,
+                    CategoryId = "food",
+                    Quantity = 1,
+                    UnitPrice = pedido.Total,
+                    CurrencyId = "ARS",
+                });
+            }
+
+            // 9. Construir la preferencia completa
             var preferenceRequest = new PreferenceRequest
             {
-                Items = new List<PreferenceItemRequest>
+                Items = items,
+                Payer = new PreferencePayerRequest
                 {
-                    new PreferenceItemRequest
-                    {
-                        Id = pedido.Id.ToString(),
-                        Title = $"Pedido #{pedido.Id} - {admin.NombreLocal}",
-                        Description = $"Pedido en {admin.NombreLocal}",
-                        Quantity = 1,
-                        CurrencyId = "ARS",
-                        UnitPrice = pedido.Total
-                    }
+                    Name = pedido.NombreCliente ?? "Cliente",
+                    Phone = !string.IsNullOrEmpty(pedido.TelefonoCliente)
+                        ? new PhoneRequest
+                        {
+                            AreaCode = "",
+                            Number = pedido.TelefonoCliente
+                        }
+                        : null,
                 },
                 BackUrls = new PreferenceBackUrlsRequest
                 {
@@ -264,7 +307,20 @@ namespace Vinto.Api.Services.Implementaciones
                     Failure = $"{_frontendClientUrl}/{slug}/pago/failure?codigo={pedido.CodigoSeguimiento}",
                     Pending = $"{_frontendClientUrl}/{slug}/pago/pending?codigo={pedido.CodigoSeguimiento}"
                 },
+                PaymentMethods = new PreferencePaymentMethodsRequest
+                {
+                    ExcludedPaymentTypes = new List<PreferencePaymentTypeRequest>
+                    {
+                        new PreferencePaymentTypeRequest { Id = "credit_card" },
+                        new PreferencePaymentTypeRequest { Id = "ticket" }
+                    },
+                    Installments = 1
+                },
+                NotificationUrl = !string.IsNullOrEmpty(_backendUrl)
+                    ? $"{_backendUrl}/api/MercadoPago/webhook"
+                    : null,
                 ExternalReference = pedido.CodigoSeguimiento,
+                StatementDescriptor = TruncarStatementDescriptor(admin.NombreLocal),
                 // NOTA: AutoReturn requiere HTTPS, lo dejamos sin setear para desarrollo.
                 // En producción podríamos agregar: AutoReturn = "approved"
             };
@@ -591,6 +647,22 @@ namespace Vinto.Api.Services.Implementaciones
                 TokenExpirado = tokenExpirado,
                 PedidosPendientesConMP = pedidosPendientes
             };
+        }
+
+        private static string TruncarStatementDescriptor(string? nombreLocal)
+        {
+            if (string.IsNullOrEmpty(nombreLocal)) return "VINTO";
+
+            var limpio = new string(nombreLocal
+                .Normalize(System.Text.NormalizationForm.FormD)
+                .Where(c => char.IsLetterOrDigit(c) || c == ' ')
+                .ToArray())
+                .ToUpper()
+                .Trim();
+
+            if (string.IsNullOrEmpty(limpio)) return "VINTO";
+
+            return limpio.Length > 22 ? limpio.Substring(0, 22) : limpio;
         }
 
         // Clase interna para deserializar la respuesta de /oauth/token de MP

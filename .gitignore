@@ -487,3 +487,6 @@ appsettings.json
 appsettings.Development.json
 # Claude Code local settings
 .claude/settings.local.json
+
+# User uploaded files
+uploads/
