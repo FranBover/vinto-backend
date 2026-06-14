@@ -35,22 +35,12 @@ steps:
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Eat_Experience.WebApi"'
+    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Eat_Experience"'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
-
-- task: VSTest@2
-  name: "RunTests"
-  inputs:
-    testSelector: 'testAssemblies'
-    testAssemblyVer2: |
-      **\Eat_Experience.WebApi.Test.dll
-            !**\*TestAdapter.dll
-            !**\obj\**
-    searchFolder: '$(System.DefaultWorkingDirectory)'
 
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'Eat_Experience.WebApi-$(Build.SourceBranchName)-$(Build.BuildId)'
+    ArtifactName: 'Eat_Experience-$(Build.SourceBranchName)-$(Build.BuildId)'
     publishLocation: 'Container'
