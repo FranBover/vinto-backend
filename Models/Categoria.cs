@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace Vinto.Api.Models
@@ -9,6 +9,8 @@ namespace Vinto.Api.Models
 
         [Required]
         public string Nombre { get; set; } = string.Empty;
+
+        public int Orden { get; set; } = 0;
 
         [Required]
         public int AdministradorId { get; set; }

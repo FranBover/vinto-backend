@@ -47,14 +47,22 @@ namespace Vinto.Api.Controllers
                         .ThenInclude(v => v.Opcion2)
                 .ToListAsync();
 
-            var imagenes = await _context.Imagenes
+            var imagenesProductos = await _context.Imagenes
                 .Where(i => i.AdministradorId == administrador.Id && i.Tipo == "producto")
                 .OrderBy(i => i.Orden)
                 .ToListAsync();
 
-            var imagenesPorProducto = imagenes
+            var imagenesPorProducto = imagenesProductos
                 .GroupBy(i => i.EntidadId)
                 .ToDictionary(g => g.Key, g => g.ToList());
+
+            var imagenesCategorias = await _context.Imagenes
+                .Where(i => i.AdministradorId == administrador.Id && i.Tipo == "categoria")
+                .ToListAsync();
+
+            var imagenPorCategoria = imagenesCategorias
+                .GroupBy(i => i.EntidadId)
+                .ToDictionary(g => g.Key, g => g.First());
 
             var logoImagen = await _context.Imagenes
                 .Where(i => i.AdministradorId == administrador.Id && i.Tipo == "logo")
@@ -110,23 +118,29 @@ namespace Vinto.Api.Controllers
                     CostoEnvio = administrador.CostoEnvio,
                     MercadoPagoHabilitado = administrador.MercadoPagoConectado
                 },
-                Categorias = categorias.Select(c =>
-                {
-                    var descCateg = descPorCategoria.GetValueOrDefault(c.Id) ?? new List<Descuento>();
-
-                    return new CategoriaMenuDTO
+                Categorias = categorias
+                    .OrderBy(c => c.Orden)
+                    .ThenBy(c => c.Id)
+                    .Select(c =>
                     {
-                        Id = c.Id,
-                        Nombre = c.Nombre,
-                        Productos = c.Productos.Select(p =>
+                        var descCateg = descPorCategoria.GetValueOrDefault(c.Id) ?? new List<Descuento>();
+                        var imagenCategoria = imagenPorCategoria.TryGetValue(c.Id, out var imgC) ? imgC : null;
+
+                        return new CategoriaMenuDTO
                         {
-                            imagenesPorProducto.TryGetValue(p.Id, out var imgs);
-                            var descProd = descPorProducto.GetValueOrDefault(p.Id) ?? new List<Descuento>();
-                            var descLinea = descProd.Concat(descCateg).ToList();
-                            return MapProducto(p, c.Id, descLinea, imgs);
-                        }).ToList()
-                    };
-                }).ToList(),
+                            Id = c.Id,
+                            Nombre = c.Nombre,
+                            Orden = c.Orden,
+                            ImagenUrl = imagenCategoria?.Url,
+                            Productos = c.Productos.Select(p =>
+                            {
+                                imagenesPorProducto.TryGetValue(p.Id, out var imgs);
+                                var descProd = descPorProducto.GetValueOrDefault(p.Id) ?? new List<Descuento>();
+                                var descLinea = descProd.Concat(descCateg).ToList();
+                                return MapProducto(p, c.Id, descLinea, imgs);
+                            }).ToList()
+                        };
+                    }).ToList(),
                 DescuentosPedidoCompleto = descuentosGlobales.Select(d => new DescuentoPedidoCompletoMenuDTO
                 {
                     Nombre = d.Nombre,

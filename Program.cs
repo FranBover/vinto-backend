@@ -90,6 +90,7 @@ builder.Services.AddScoped<IDescuentoService, DescuentoService>();
 builder.Services.AddScoped<ICuponService, CuponService>();
 builder.Services.AddScoped<IDescuentoCalculatorService, DescuentoCalculatorService>();
 builder.Services.AddScoped<IMercadoPagoService, MercadoPagoService>();
+builder.Services.AddScoped<IReporteService, ReporteService>();
 
 
 
