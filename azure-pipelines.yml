@@ -35,7 +35,7 @@ steps:
 - task: VSBuild@1
   inputs:
     solution: '$(solution)'
-    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Vinto.WebApi"'
+    msbuildArgs: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:SkipInvalidConfigurations=true /p:DesktopBuildPackageLocation="$(build.artifactStagingDirectory)\WebApp.zip" /p:DeployIisAppPath="Eat_Experience.WebApi"'
     platform: '$(buildPlatform)'
     configuration: '$(buildConfiguration)'
 
@@ -44,7 +44,7 @@ steps:
   inputs:
     testSelector: 'testAssemblies'
     testAssemblyVer2: |
-      **\Vinto.WebApi.Test.dll
+      **\Eat_Experience.WebApi.Test.dll
             !**\*TestAdapter.dll
             !**\obj\**
     searchFolder: '$(System.DefaultWorkingDirectory)'
@@ -52,5 +52,5 @@ steps:
 - task: PublishBuildArtifacts@1
   inputs:
     PathtoPublish: '$(Build.ArtifactStagingDirectory)'
-    ArtifactName: 'Vinto.WebApi-$(Build.SourceBranchName)-$(Build.BuildId)'
+    ArtifactName: 'Eat_Experience.WebApi-$(Build.SourceBranchName)-$(Build.BuildId)'
     publishLocation: 'Container'
