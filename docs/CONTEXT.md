@@ -1,400 +1,509 @@
-# Vinto — Backend (Vinto.Api) · Documentación técnica
+# Vinto — Backend (Vinto.Api) · Documentación técnica interna
 
-> Fuente de verdad del backend. Generada leyendo el código real del repo.
+> Documentación interna, más profunda que el README. Generada leyendo el código real del repositorio y verificada contra el estado actual de `main`.
 > Donde algo no pudo confirmarse con certeza se marca **(verificar)**.
-> **No** se incluyen valores de secretos: solo se referencian por su nombre de configuración.
+> **No** se incluyen valores de secretos: solo se referencian por nombre de configuración.
 
-Última actualización del documento: 2026-06-25.
+Última actualización: 2026-08-20 · Verificado contra el commit `cc8ed06`.
 
 ---
 
 ## 1. Qué es Vinto
 
-Vinto es un **SaaS multi-tenant de menú / tienda online para locales gastronómicos**. Cada local (tenant) tiene su catálogo, su panel de administración y su carta pública.
+SaaS multi-tenant de tienda online para negocios chicos. Cada negocio (tenant) tiene su catálogo, su panel de administración y su tienda pública.
 
-Características de producto que se desprenden del código:
+Nació para un local de comida que tomaba todos los pedidos por teléfono. El dominio se generalizó después: hoy modela productos, variantes, stock, cupones y pedidos sin supuestos sobre el rubro. Quedan restos del origen en la nomenclatura —`Administrador.NombreLocal`, la ruta pública `/locales/{slug}`, el endpoint `comanda`— que no se renombraron para no romper el frontend ni forzar migraciones.
 
-- **Carta pública por local**, accesible por *slug* derivado del nombre del local (`GET /api/public/locales/{slug}/menu`). No requiere login del cliente.
-- **Pedidos sin login del cliente**: el cliente arma el pedido y lo envía contra el endpoint público del local (`POST /api/public/locales/{slug}/pedidos`). Se genera un **código de seguimiento**.
-- **Pedido por WhatsApp**: al crear el pedido el backend devuelve un `ResumenWhatsApp` (texto formateado listo para enviar al local). También hay endpoint admin para regenerarlo.
-- **Panel de administración (privado)**: gestión de catálogo, variantes, stock, descuentos, cupones, pedidos, imágenes, datos del local, reportes y conexión con MercadoPago. Protegido por **JWT**.
-- **Pagos con MercadoPago** vía OAuth (cada local conecta su propia cuenta MP) + checkout por preferencia + webhook.
-- **Tiempo real** con SignalR (hub `/hubs/pedidos`): notifica nuevos pedidos y pagos confirmados al panel del admin.
+Características que se desprenden del código:
+
+- **Tienda pública por negocio**, accesible por *slug* derivado del nombre (`GET /api/public/locales/{slug}/menu`). Sin login del comprador.
+- **Pedidos sin registro**: el comprador arma el pedido contra el endpoint público. Se genera un código de seguimiento.
+- **Resumen para WhatsApp**: al crear el pedido el backend devuelve `ResumenWhatsApp`, texto formateado en es-AR listo para enviar. Regenerable desde el panel.
+- **Panel privado**: catálogo, variantes, stock, descuentos, cupones, pedidos, imágenes, datos del negocio, reportes y conexión con Mercado Pago. Protegido por JWT.
+- **Pagos con Mercado Pago** vía OAuth (cada negocio conecta su propia cuenta), preferencias de Checkout Pro y webhook con firma validada.
+- **Tiempo real** con SignalR (`/hubs/pedidos`): notifica nuevos pedidos y pagos confirmados al panel.
 
 **Multi-tenant:**
-- En lo **público** el tenant se resuelve por **slug** (derivado de `Administrador.NombreLocal`).
-- En lo **privado** el tenant se resuelve por **`adminId`** (claim del JWT). Cada entidad de negocio cuelga de `AdministradorId`.
+- En lo **público**, el tenant se resuelve por **slug** (derivado de `Administrador.NombreLocal`).
+- En lo **privado**, por **`adminId`** (claim del JWT). Cada entidad de negocio cuelga de `AdministradorId`.
 
 ---
 
 ## 2. Stack y arquitectura
 
 **Stack** (`Vinto.Api.csproj`):
-- ASP.NET Core **.NET 9** (Web API).
-- **EF Core 9** + `Microsoft.EntityFrameworkCore.SqlServer` (SQL Server).
-- Autenticación **JWT** (`Microsoft.AspNetCore.Authentication.JwtBearer` 9.0.4).
-- **SignalR** (tiempo real).
-- **MercadoPago SDK** (`mercadopago-sdk` 2.12.1).
-- **SixLabors.ImageSharp** 3.1.12 (procesamiento de imágenes).
-- **Swashbuckle / Swagger** 6.6.2 (solo en Development).
-- Hashing de password: `PasswordHasher<Administrador>` (ASP.NET Core Identity).
 
-**Solución/proyecto:** solución `Eat_Experience.sln` (raíz del repo), proyecto `Vinto.Api` en el subdirectorio `Eat_Experience/Eat_Experience/`. Namespace raíz: `Vinto.Api`.
+- ASP.NET Core **.NET 9** (Web API)
+- **EF Core 9** + `Microsoft.EntityFrameworkCore.SqlServer` 9.0.4
+- **JWT** (`Microsoft.AspNetCore.Authentication.JwtBearer` 9.0.4)
+- **SignalR** (incluido en el framework)
+- **MercadoPago SDK** 2.12.1
+- **Azure.Storage.Blobs** 12.29.1
+- **SixLabors.ImageSharp** 3.1.12
+- **Swashbuckle** 6.6.2 (solo en Development)
+- Hashing de password: `PasswordHasher<Administrador>` (ASP.NET Core Identity)
+
+**Solución/proyecto:** `Eat_Experience.sln` en la raíz del repositorio; el proyecto `Vinto.Api` vive en el subdirectorio `Eat_Experience/`. La carpeta conserva el nombre viejo mientras que el `.csproj` y el namespace raíz ya son `Vinto.Api`. Por eso el pipeline referencia `**/Vinto.Api.csproj` y arranca con `dotnet Vinto.Api.dll`.
 
 **Capas:**
+
 ```
-Controllers/   → HTTP, extracción de adminId del JWT, validación de entrada, mapeo a DTO.
-Services/      → Lógica de negocio (Interfaces/ + Implementaciones/).
-Repositories/  → Acceso a datos sobre AppDbContext (Interfaces/ + Implementaciones/).
-DTOs/          → Contratos de request/response.
-Models/        → Entidades EF.
-Data/AppDbContext.cs → DbContext, relaciones, índices, defaults.
-Helpers/       → EncryptionHelper (AES-GCM), MercadoPagoSignatureValidator, ValidacionException.
-Storage/       → IStorageProvider + LocalStorageProvider (almacenamiento de imágenes en disco).
-Hubs/          → PedidosHub (SignalR).
-Migrations/    → Migraciones EF.
+Controllers/   → HTTP, extracción de adminId del JWT, validación de entrada, mapeo a DTO
+Services/      → Lógica de negocio (Interfaces/ + Implementaciones/)
+Repositories/  → Acceso a datos sobre AppDbContext (Interfaces/ + Implementaciones/)
+DTOs/          → Contratos de request/response
+Models/        → Entidades EF
+Data/          → AppDbContext: relaciones, índices, precisión, defaults
+Helpers/       → EncryptionHelper (AES-GCM), MercadoPagoSignatureValidator, ValidacionException
+Storage/       → IStorageProvider + LocalStorageProvider + AzureBlobStorageProvider
+Hubs/          → PedidosHub (SignalR)
+Migrations/    → 22 migraciones EF
 ```
 
-> Nota: algunos controllers/servicios usan **`AppDbContext` directamente** (no todo pasa por repos). Ej.: `PublicController`, `PedidoService`, `MercadoPagoService`, `CategoriasController`, `ProductosController` acceden a `_context` para queries con `Include`. La capa de repos existe pero su uso es parcial.
+> **Nota sobre la capa de repos:** su uso es parcial y deliberado. Varios controllers y services usan `AppDbContext` directamente cuando la consulta necesita múltiples `Include` (`PublicController.GetMenu` es el caso extremo, con cinco niveles de `ThenInclude`). Conviven ambos estilos; no hay convención única.
 
 **Multi-tenant en la práctica:**
-- Los filtros globales (`HasQueryFilter`) están **comentados** en `AppDbContext` (líneas ~263-267). El aislamiento entre tenants se hace **manualmente** filtrando por `AdministradorId` en cada query. **Riesgo:** si una query olvida el filtro, hay fuga de datos entre locales.
-- Patrón típico en controllers privados: `TryGetAdminId(out int adminId)` lee el claim `adminId` del JWT; luego cada operación valida que la entidad pertenezca a ese admin (`Forbid()` si no).
 
-**Pipeline (`Program.cs`):** JWT → DbContext (SQL Server, command timeout 180s) → DI de repos y services → MemoryCache → HttpClient → EncryptionHelper (singleton) → SignatureValidator → StorageProvider + ImagenService → SignalR → Controllers + Swagger → CORS `AllowFrontend`.
-- **CORS** `AllowFrontend`: orígenes `http://localhost:5173` y el front de Azure (`vinto-frontend-dev-...azurewebsites.net`), `AllowCredentials` (requerido por SignalR).
-- **Archivos estáticos**: sirve `/uploads` desde `ContentRootPath/uploads`.
-- **Seed**: si no hay administradores, crea uno semilla (ver §7 y §8).
-- Swagger declara dos *security schemes*: `Bearer` (JWT) y `X-Admin-Key` (registro de admins).
+- Los filtros globales (`HasQueryFilter`) están **preparados pero comentados** en `AppDbContext` (líneas ~263-267), porque activarlos requiere inyectar un `ITenantProvider` en el constructor del contexto. El aislamiento se hace **manualmente** filtrando por `AdministradorId` en cada consulta. **Riesgo:** una consulta que olvide el filtro es una fuga entre tenants.
+- Patrón en controllers privados: `TryGetAdminId(out int adminId)` lee el claim `adminId`; luego cada operación valida pertenencia de la entidad y devuelve `Forbid()` si no corresponde.
+- La unicidad es por tenant: índices compuestos `(AdministradorId, Nombre)` en `Categoria` y `Producto`, `(AdministradorId, Codigo)` en `Cupon`.
+
+**Pipeline (`Program.cs`), en orden de registro:**
+
+JWT (con handler de `access_token` por query string para `/hubs`) → DbContext SQL Server (command timeout 180s) → 13 repositorios → 17 servicios → MemoryCache → HttpClient → `EncryptionHelper` (singleton) → `MercadoPagoSignatureValidator` (singleton) → `IStorageProvider` condicional → `ImagenService` → SignalR → Controllers + Swagger → CORS `AllowFrontend`.
+
+Orden del middleware en la request:
+
+1. **Middleware global de excepciones** (inline, lo más arriba posible)
+2. Swagger (solo Development)
+3. `UseHttpsRedirection`
+4. `UseStaticFiles` + static files de `/uploads` desde `ContentRootPath/uploads`
+5. `UseCors("AllowFrontend")`
+6. `UseAuthentication` → `UseAuthorization`
+7. `MapHub<PedidosHub>("/hubs/pedidos")` + `MapControllers`
+8. Seed de admin, **condicionado a `IsDevelopment()`**
+
+**Detalle del middleware de excepciones:** está por encima de `UseCors` a propósito y **no** llama a `Response.Clear()`, para no borrar los headers CORS que ya se aplicaron aguas abajo. Sin eso, un 500 llegaba al navegador sin headers CORS y se reportaba como error de CORS, enmascarando la causa real. El cuerpo está gateado: en producción solo `{ error: "Error interno del servidor" }`; fuera de producción incluye `error`, `detalle` y `tipo`. La excepción completa siempre se loguea con `LogError`.
+
+**CORS `AllowFrontend`** — orígenes permitidos:
+- `http://localhost:5173`
+- `https://vinto-frontend-dev-ffbbb4e2fzcfd5h9.centralus-01.azurewebsites.net`
+- `https://purple-dune-08cbe830f.7.azurestaticapps.net`
+- `https://vintoapp.com`
+- `https://www.vintoapp.com`
+
+Con `AllowAnyHeader`, `AllowAnyMethod` y `AllowCredentials` (requerido por SignalR).
+
+**Swagger** declara dos security schemes: `Bearer` (JWT) y `X-Admin-Key` (registro de negocios).
 
 ---
 
-## 3. Modelo de datos
+## 3. Autenticación y autorización
 
-Entidades reales (de `Models/` y `AppDbContext`). `*` = nullable.
+**Login** (`POST /api/Auth/login`): busca por email, verifica con `PasswordHasher.VerifyHashedPassword`, rechaza si `EsActivo == false`, y emite el token.
+
+**Claims del JWT** (`AuthController.GenerateToken`):
+- `sub` → email del administrador
+- `adminId` → id del tenant (**es el que sostiene todo el aislamiento**)
+- `jti` → GUID aleatorio
+
+Firma HMAC-SHA256 con `JwtSettings:Key`. Expiración según `JwtSettings:ExpirationInMinutes`.
+
+**Validación** (`Program.cs`): valida issuer, audience, lifetime y firma. Todo activado.
+
+**Registro** (`POST /api/Auth/register`): `[AllowAnonymous]`, protegido por el header `X-Admin-Key` comparado contra `AdminRegistroKey`. Verifica que el email sea único.
+
+**Autorización por tenant:** no hay roles. El único eje es la pertenencia al tenant. Cada endpoint privado extrae `adminId` del token y valida que el recurso le pertenezca.
+
+> No hay revocación de tokens: el `jti` se emite pero no se persiste ni se chequea contra una lista. Un token robado es válido hasta que expira. Mitigación actual: expiración corta. **(verificar si vale la pena una blacklist)**
+
+---
+
+## 4. Modelo de datos
+
+Entidades reales de `Models/` y `AppDbContext`. `*` = nullable.
 
 ### Administrador (tenant)
-Tabla central. Campos principales:
-- `Id`, `Nombre`, `Email` (único), `PasswordHash`.
-- Datos del local: `NombreLocal`, `Direccion`, `Telefono`, `LinkWhatsapp*`, `LogoUrl*`, `Horarios*`, `UbicacionUrl*`.
-- `EsActivo` (bool), `FechaRegistro`, `UltimoAcceso*`, `PlanSuscripcion*`, `DominioPersonalizado*`.
-- Pago/transferencia: `AliasTransferencia*`, `TitularCuenta*`.
-- Envío: `ZonaEnvio` (`"Ciudad"` | `"Nacional"`, default `"Nacional"`), `CostoEnvio*` (decimal).
-- Stock: `StockBajoAlerta*` (default 5), `AutoDeshabilitarSinStock` (bool, default false).
-- MercadoPago: `MercadoPagoUserId*`, `MercadoPagoAccessToken*` (cifrado), `MercadoPagoRefreshToken*` (cifrado), `MercadoPagoPublicKey*`, `MercadoPagoTokenExpiresAt*`, `MercadoPagoConectado` (bool).
 
-Relaciones (1:N, todas `Restrict` salvo nota): Administrador → Categoria, Producto, Pedido, Descuento, Cupon, MovimientoStock, Imagen (Cascade), ComentarioPedido.
+Tabla central.
+- `Id`, `Nombre`, `Email` (**índice único**), `PasswordHash`
+- Negocio: `NombreLocal`, `Direccion`, `Telefono`, `LinkWhatsapp*`, `LogoUrl*`, `Horarios*`, `UbicacionUrl*`
+- `EsActivo`, `FechaRegistro` (default `GETUTCDATE()`), `UltimoAcceso*`, `PlanSuscripcion*`, `DominioPersonalizado*`
+- Transferencia: `AliasTransferencia*`, `TitularCuenta*`
+- Envío: `ZonaEnvio` (`"Ciudad"` | `"Nacional"`, default `"Nacional"`), `CostoEnvio*`
+- Stock: `StockBajoAlerta*` (default 5), `AutoDeshabilitarSinStock` (default false)
+- Mercado Pago: `MercadoPagoUserId*`, `MercadoPagoAccessToken*` (**cifrado**), `MercadoPagoRefreshToken*` (**cifrado**), `MercadoPagoPublicKey*`, `MercadoPagoTokenExpiresAt*`, `MercadoPagoConectado`
 
-### Categoria
-`Id`, `Nombre`, `Orden` (default 0), `AdministradorId` → Administrador. 1:N con Producto.
-Índice único `(AdministradorId, Nombre)`.
+Relaciones 1:N, todas `Restrict` salvo `Imagen` (Cascade): Categoria, Producto, Pedido, Descuento, Cupon, MovimientoStock, Imagen, ComentarioPedido.
 
-### Producto
-`Id`, `Nombre`, `Descripcion*`, `Precio` (decimal 18,2), `ImagenUrl`, `Disponible` (default true), `CategoriaId` → Categoria, `AdministradorId` → Administrador.
-- `TieneVariantes` (bool, default false), `Stock*` (int — stock simple cuando no tiene variantes).
-- Colecciones: `Extras` (ProductoExtra), `TiposVariante`, `Variantes`.
-- Índice único `(AdministradorId, Nombre)`.
+### Catálogo
 
-### ProductoExtra
-`Id`, `Nombre`, `PrecioAdicional` (18,2), `ProductoId` → Producto (Restrict). Add-ons del producto (ej. "Extra queso").
+**Categoria** — `Id`, `Nombre`, `Orden` (default 0), `AdministradorId`. Índice único `(AdministradorId, Nombre)`.
 
-### TipoVariante
-`Id`, `ProductoId` → Producto (Cascade), `Nombre`, `Orden`. Colección `Opciones`.
-Un producto puede tener **máx. 2** tipos de variante (validado en controller). Ej.: "Talle", "Color".
+**Producto** — `Id`, `Nombre`, `Descripcion*`, `Precio` (18,2), `ImagenUrl`, `Disponible` (default true), `CategoriaId`, `AdministradorId`, `TieneVariantes` (default false), `Stock*` (stock simple cuando no tiene variantes). Colecciones: `Extras`, `TiposVariante`, `Variantes`. Índice único `(AdministradorId, Nombre)`.
 
-### OpcionVariante
-`Id`, `TipoVarianteId` → TipoVariante (Cascade), `Valor`, `Orden`. Ej.: "M", "L", "Rojo".
+**ProductoExtra** — `Id`, `Nombre`, `PrecioAdicional` (18,2), `ProductoId` (Restrict).
 
-### VarianteProducto
-Combinación concreta de opciones con su propio precio/stock.
-`Id`, `ProductoId` → Producto (Cascade), `Opcion1Id` → OpcionVariante (Restrict), `Opcion2Id*` → OpcionVariante (Restrict), `Precio` (18,2), `Stock*`, `Disponible` (default true), `Sku*`.
+### Variantes (dos niveles)
 
-### MovimientoStock (auditoría de stock)
-`Id`, `AdministradorId`, `ProductoId`, `VarianteProductoId*`, `Tipo` (`"entrada"`|`"salida"`|`"ajuste"`), `Cantidad`, `StockAnterior`, `StockNuevo`, `Motivo*`, `FechaCreacion` (default UTC). Todas las FKs `Restrict`.
+**TipoVariante** — `Id`, `ProductoId` (Cascade), `Nombre`, `Orden`. Máximo 2 por producto, validado en el controller.
 
-### Pedido
-`Id`, `AdministradorId` → Administrador (Restrict), `Fecha` (default UTC), `Estado` (default `"Pendiente"`), `CodigoSeguimiento*`.
-- Cliente: `NombreCliente`, `TelefonoCliente`.
-- Pago/entrega: `FormaPago`, `FormaEntrega`, `MontoPagoEfectivo*`, `DireccionCliente*`, `ReferenciaDireccion*`, `UbicacionUrl*`.
-- Totales: `Total` (18,2), `SubtotalSinDescuentos`, `MontoDescuentoProductos`, `MontoDescuentoCupon` (default 0).
-- Cupón: `CuponId*` → Cupon (Restrict), `CodigoCupon*`.
-- MercadoPago: `MercadoPagoPreferenceId*`, `MercadoPagoPaymentId*`, `MercadoPagoStatus*`, `MercadoPagoStatusDetail*`, `MercadoPagoFechaPago*`, `MercadoPagoCollectionId*`.
-- Colección `Detalles` (DetallePedido, Cascade).
-- Índice `(AdministradorId, Fecha)`.
-- Estados usados (validados en `PedidosController.PatchEstado`): `Pendiente`, `Confirmado`, `EnPreparacion`, `Listo`, `Entregado`, `Cancelado`.
+**OpcionVariante** — `Id`, `TipoVarianteId` (Cascade), `Valor`, `Orden`.
 
-### DetallePedido
-`Id`, `PedidoId` → Pedido (Cascade), `ProductoId` → Producto (Restrict), `Cantidad`, `PrecioUnitario` (18,2; se guarda el **precio ya con descuento de línea**), `VarianteProductoId*` → VarianteProducto (Restrict). Colección `ProductosExtra`.
+**VarianteProducto** — combinación concreta: `Id`, `ProductoId` (Cascade), `Opcion1Id` (Restrict), `Opcion2Id*` (Restrict), `Precio` (18,2), `Stock*`, `Disponible`, `Sku*`.
 
-### DetallePedidoExtra
-`Id`, `DetallePedidoId` → DetallePedido (Cascade), `ProductoExtraId` → ProductoExtra (Restrict). Índice único `(DetallePedidoId, ProductoExtraId)`.
+> El diseño separa la **definición** de las dimensiones de las **combinaciones** concretas. Permite que cada combinación tenga precio y stock propios sin duplicar la definición.
 
-### ComentarioPedido
-`Id`, `PedidoId` → Pedido (Cascade), `Texto` (máx 500), `FechaCreacion`, `AdministradorId` → Administrador (Restrict). Notas internas del admin sobre el pedido.
+### Ventas
 
-### Descuento
-Reglas de descuento automáticas del local.
-`Id`, `AdministradorId` (Restrict), `Nombre`, `Tipo` (`"Porcentaje"` | otro = monto — ver §6), `Valor` (18,2), `ProductoId*` (SetNull), `CategoriaId*` (SetNull), `AplicaAPedidoCompleto` (bool), `FechaInicio*`, `FechaFin*`, `Activo`, `FechaCreacion`. Índice `(AdministradorId, Activo)`.
+**Pedido**
+- `Id`, `AdministradorId` (Restrict), `Fecha` (default `GETUTCDATE()`), `Estado` (default `"Pendiente"`), `CodigoSeguimiento*`
+- Cliente: `NombreCliente`, `TelefonoCliente`
+- Pago/entrega: `FormaPago`, `FormaEntrega`, `MontoPagoEfectivo*`, `DireccionCliente*`, `ReferenciaDireccion*`, `UbicacionUrl*`
+- Totales: `Total` (18,2), `SubtotalSinDescuentos`, `MontoDescuentoProductos`, `MontoDescuentoCupon` (todos default 0)
+- Cupón: `CuponId*` (Restrict), `CodigoCupon*`
+- Mercado Pago: `MercadoPagoPreferenceId*`, `MercadoPagoPaymentId*`, `MercadoPagoStatus*`, `MercadoPagoStatusDetail*`, `MercadoPagoFechaPago*`, `MercadoPagoCollectionId*`
+- Colección `Detalles` (Cascade). Índice `(AdministradorId, Fecha)`
 
-### Cupon
-`Id`, `AdministradorId` (Restrict), `Codigo` (máx 30), `Tipo` (`"Porcentaje"` | `"MontoFijo"`), `Valor` (18,2), `FechaVencimiento*`, `LimiteUsos*`, `UsosActuales` (default 0), `PedidoMinimo*` (18,2), `Activo`, `FechaCreacion`. Índice único `(AdministradorId, Codigo)`.
+Estados validados en `PedidosController.PatchEstado`: `Pendiente`, `Confirmado`, `EnPreparacion`, `Listo`, `Entregado`, `Cancelado`.
 
-### UsoCupon (auditoría de canje)
-`Id`, `CuponId` → Cupon (Restrict), `PedidoId` → Pedido (Cascade), `MontoDescontado` (18,2), `FechaUso`, `Liberado` (bool), `FechaLiberacion*`. Permite liberar/re-aplicar el cupón cuando un pedido se cancela/reactiva.
+**DetallePedido** — `Id`, `PedidoId` (Cascade), `ProductoId` (Restrict), `Cantidad`, `PrecioUnitario` (18,2; guarda el precio **ya con el descuento de línea aplicado**), `VarianteProductoId*` (Restrict). Colección `ProductosExtra`.
 
-### DetallePedidoDescuento (auditoría/snapshot de descuentos aplicados)
-`Id`, `PedidoId` (Cascade), `DetallePedidoId*` (Restrict), `DescuentoId*` (SetNull), `NombreDescuentoSnapshot`, `TipoDescuento` (`"Producto"`/`"Categoria"`/`"PedidoCompleto"`), `MontoDescontado` (18,2), `FechaCreacion`.
+**DetallePedidoExtra** — `Id`, `DetallePedidoId` (Cascade), `ProductoExtraId` (Restrict). Índice único `(DetallePedidoId, ProductoExtraId)`: evita repetir el mismo adicional en la misma línea.
 
-### Imagen
-`Id`, `AdministradorId` → Administrador (Cascade), `NombreOriginal`, `NombreAlmacenado`, `ContentType`, `TamanioBytes`, `Url`, `Tipo` (`"producto"` | `"logo"` | `"categoria"`), `EntidadId*` (id del producto/categoría; null si logo), `Orden`, `FechaCreacion`. Índice `(AdministradorId, Tipo, EntidadId)`.
-> El comentario del modelo dice solo `"producto"`/`"logo"`, pero el código usa también `"categoria"` (PublicController/CategoriasController).
+**ComentarioPedido** — `Id`, `PedidoId` (Cascade), `Texto` (máx 500), `FechaCreacion`, `AdministradorId` (Restrict). Notas internas.
 
-### PagoMercadoPago (auditoría de webhooks de pago)
-`Id`, `PedidoId` → Pedido (Restrict), `PaymentId`, `Status`, `StatusDetail*`, `Monto` (18,2), `FechaEvento`, `RawWebhookData*` (JSON crudo del pago), `ProcesadoConExito` (bool). Índice **único `(PaymentId, Status)`** → garantiza idempotencia del webhook.
+### Promociones
 
-### PreviewActualizacionPrecios + PreviewActualizacionPreciosItem  ❌ (sin uso)
-Modelos para una feature de **actualización masiva de precios por categoría con vista previa**:
-- `PreviewActualizacionPrecios`: `Id` (Guid), `AdministradorId`, `CategoriaId`, `Tipo`, `Valor`, `Redondear`, `TotalAfectados`, `FechaCreacion`, `FechaExpiracion`, `Aplicado`, `FechaAplicacion*`, colección `Items`.
-- `PreviewActualizacionPreciosItem`: `Id`, `PreviewId` (Guid), `ProductoId`, `PrecioActual`, `PrecioNuevo`.
-- Tienen `DbSet` y migración aplicada, **pero ningún Controller ni Service los referencia** → feature a medio implementar (solo el esquema). Ver §6 y §8.
+**Descuento** — `Id`, `AdministradorId` (Restrict), `Nombre`, `Tipo` (`"Porcentaje"` | otro = monto fijo), `Valor` (18,2), `ProductoId*` (SetNull), `CategoriaId*` (SetNull), `AplicaAPedidoCompleto`, `FechaInicio*`, `FechaFin*`, `Activo`, `FechaCreacion`. Índice `(AdministradorId, Activo)`.
 
-### JwtSettings (config, no entidad)
-`Key`, `Issuer`, `Audience`, `ExpirationInMinutes`. Se bindea desde `JwtSettings` en config.
+**Cupon** — `Id`, `AdministradorId` (Restrict), `Codigo` (máx 30), `Tipo` (`"Porcentaje"` | `"MontoFijo"`), `Valor` (18,2), `FechaVencimiento*`, `LimiteUsos*`, `UsosActuales` (default 0), `PedidoMinimo*`, `Activo`, `FechaCreacion`. Índice único `(AdministradorId, Codigo)`.
 
-**Defaults en DB (`GETUTCDATE()`):** `Administrador.FechaRegistro`, `Pedido.Fecha`, `Imagen.FechaCreacion`, `MovimientoStock.FechaCreacion`, `Descuento/Cupon/UsoCupon/DetallePedidoDescuento.FechaCreacion`.
+**UsoCupon** — `Id`, `CuponId` (Restrict), `PedidoId` (Cascade), `MontoDescontado` (18,2), `FechaUso`, `Liberado`, `FechaLiberacion*`. Permite liberar y re-aplicar el cupón cuando un pedido se cancela o reactiva.
 
----
+**DetallePedidoDescuento** — snapshot de auditoría: `Id`, `PedidoId` (Cascade), `DetallePedidoId*` (Restrict), `DescuentoId*` (SetNull), `NombreDescuentoSnapshot`, `TipoDescuento` (`"Producto"`/`"Categoria"`/`"PedidoCompleto"`), `MontoDescontado` (18,2), `FechaCreacion`.
 
-## 4. Funcionalidades implementadas
+> El snapshot guarda el nombre, no solo la FK: si la regla se edita o se borra, el pedido histórico sigue siendo legible.
 
-Leyenda: ✅ funcionando · 🟡 parcial · ❌ TODO / no implementado.
+### Operaciones
 
-| Módulo | Estado | Detalle |
-|---|---|---|
-| **Auth / JWT** | ✅ | Login (`/api/Auth/login`) y emisión de token con claims `sub`(email), `adminId`, `jti`. Expira según `JwtSettings:ExpirationInMinutes` (60). Password con `PasswordHasher`. |
-| **Registro de admin** | ✅ | `/api/Auth/register` protegido por header `X-Admin-Key` comparado contra `AdminRegistroKey` (config). Verifica email único. |
-| **Catálogo (categorías / productos)** | ✅ | CRUD de Categoria y Producto con scoping por admin. Reordenar categorías (`PATCH /api/Categorias/reordenar`). Toggle disponibilidad producto. Extras (ProductoExtra) CRUD. |
-| **Variantes** | ✅ | TipoVariante (máx 2/producto) + OpcionVariante + generación de combinaciones (`POST .../variantes/generar`), edición de precio/stock/disponibilidad/SKU por variante. |
-| **Stock** | ✅ | Por producto simple o por variante. Operaciones: ajustar, agregar/reponer, descontar (al confirmar pedido). Movimientos auditados. Alertas de stock bajo/agotado (`GET /api/Stock/alertas`) según `StockBajoAlerta`. Auto-deshabilitar al llegar a 0 si `AutoDeshabilitarSinStock`. |
-| **Descuentos automáticos** | ✅ | CRUD (`/api/Descuentos`). Cálculo por `DescuentoCalculatorService`: descuentos por producto → por categoría → a pedido completo, con vigencia por fecha. Snapshot en `DetallePedidoDescuento`. No hay DELETE de descuento (solo activar/desactivar vía update — **verificar**). |
-| **Cupones** | ✅ | CRUD (`/api/Cupones`), métricas (`/{id}/metricas`), validación pública (`/api/public/locales/{slug}/cupones/validar`). Aplicación + control de `LimiteUsos`/`UsosActuales` + liberación/re-aplicación al cancelar/reactivar pedido. No hay DELETE de cupón. |
-| **Pedidos (público)** | ✅ | Creación por slug con validación de producto/variante/extras del local, cálculo de descuentos + cupón + costo de envío, código de seguimiento, notificación SignalR `NuevoPedido`, y `ResumenWhatsApp`. |
-| **Pedidos (admin)** | ✅ | Listado filtrado (estado/fechas/formaPago/formaEntrega), detalle, cambio de estado (con descuento/reposición de stock y manejo de cupón), comanda, ticket, comentarios. |
-| **Resumen WhatsApp** | ✅ | Generado al crear el pedido y regenerable por admin (`GET /api/Pedidos/{id}/resumen`) y en estado-pago público. Texto es-AR formateado. |
-| **MercadoPago** | 🟡 | OAuth (url/callback/desconectar/estado/diagnóstico) ✅; creación de preferencia ✅; webhook con validación de firma HMAC + idempotencia ✅; endpoint dev de simulación ✅. **Pendientes/atención:** no hay **refresh** automático del token (se guarda `RefreshToken` pero no se renueva); webhook consulta el pago con token `client_credentials` de la app (enfoque marcado como "hacky" en comentarios); pagos `rejected` dejan el pedido en `Pendiente`. |
-| **Imágenes** | 🟡 | Upload (multipart) / delete / listar por entidad ✅. **Solo almacenamiento local en disco** (`/uploads`); no hay proveedor Blob pese a la config `Storage:Provider`. Ver §6/§8. |
-| **Datos del local (PATCH .../local)** | ✅ | `PATCH /api/Administrador/{id}/local` con `AdministradorLocalUpdateDTO` (campos opcionales, patch parcial). Verifica que el `id` coincida con el `adminId` del token. |
-| **Reportes** | 🟡 | Solo `GET /api/Reportes/dashboard?periodo=` (ventas y comparación de período, con timezone Argentina). No hay otros reportes. |
-| **Tiempo real (SignalR)** | ✅ | Hub `/hubs/pedidos`, grupos por `adminId`. Eventos `NuevoPedido` y `PagoConfirmado`. |
-| **Actualización masiva de precios (preview)** | ❌ | Modelos + tablas existen; **no hay endpoints ni lógica**. |
+**MovimientoStock** — `Id`, `AdministradorId`, `ProductoId`, `VarianteProductoId*`, `Tipo` (`"entrada"`|`"salida"`|`"ajuste"`), `Cantidad`, `StockAnterior`, `StockNuevo`, `Motivo*`, `FechaCreacion`. Todas las FK `Restrict`. Guarda stock anterior **y** nuevo, así el movimiento se puede auditar sin recalcular la cadena entera.
+
+**Imagen** — `Id`, `AdministradorId` (Cascade), `NombreOriginal` (255), `NombreAlmacenado` (255), `ContentType` (100), `TamanioBytes`, `Url` (500), `Tipo` (`"producto"` | `"logo"` | `"categoria"`), `EntidadId*`, `Orden` (default 0), `FechaCreacion`. Índice `(AdministradorId, Tipo, EntidadId)`.
+
+> El comentario del modelo menciona solo `"producto"`/`"logo"`, pero el código usa además `"categoria"`. El comentario está desactualizado, no el código.
+
+**PagoMercadoPago** — `Id`, `PedidoId` (Restrict), `PaymentId`, `Status`, `StatusDetail*`, `Monto` (18,2), `FechaEvento`, `RawWebhookData*` (JSON crudo), `ProcesadoConExito`. **Índice único `(PaymentId, Status)`** → idempotencia del webhook garantizada por la base.
+
+**PreviewActualizacionPrecios / PreviewActualizacionPreciosItem** — ❌ **sin uso**. Modelos, `DbSet` y migración aplicada, pero ningún controller ni service los referencia. Feature a medio implementar: solo el esquema.
+
+**JwtSettings** — no es entidad; se bindea desde la sección `JwtSettings` de configuración.
+
+### Convenciones del esquema
+
+- **Todo campo monetario es `decimal(18,2)`**, declarado con `HasPrecision`. Nunca punto flotante.
+- **Fechas en UTC**, con default `GETUTCDATE()` en: `Administrador.FechaRegistro`, `Pedido.Fecha`, `Imagen.FechaCreacion`, `MovimientoStock.FechaCreacion`, `Descuento/Cupon/UsoCupon/DetallePedidoDescuento.FechaCreacion`. La conversión a horario argentino ocurre solo en `ReporteService`.
+- **`DeleteBehavior.Restrict` por defecto.** Cascade solo donde el hijo no tiene sentido sin el padre (detalles de pedido, opciones de variante, imágenes del tenant). Un producto vendido alguna vez no se puede borrar.
 
 ---
 
 ## 5. Endpoints
 
-Rutas reales tomadas de los Controllers. Prefijo base `api/`. (`[controller]` resuelve al nombre sin sufijo, ej. `Categorias`.)
+Rutas reales tomadas de los controllers. `[controller]` resuelve al nombre sin sufijo.
 
-### Públicos (cliente — sin JWT)
+### Públicos (sin JWT)
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| POST | `/api/Auth/register` | Registra un admin. Requiere header `X-Admin-Key`. |
+| POST | `/api/Auth/register` | Registra un negocio. Requiere header `X-Admin-Key`. |
 | POST | `/api/Auth/login` | Login, devuelve `{ token }`. |
-| GET | `/api/public/locales/{slug}/menu` | Carta pública del local: info del local, categorías con productos (con precios con descuento), variantes, extras, imágenes y descuentos a pedido completo. |
-| POST | `/api/public/locales/{slug}/pedidos` | Crea un pedido para el local. Devuelve `PedidoCreateResponseDTO` (incluye `ResumenWhatsApp` y `CodigoSeguimiento`). |
-| POST | `/api/public/locales/{slug}/pedidos/{pedidoId}/preferencia-mp` | Crea la preferencia de pago MP del pedido. Body: `{ codigoSeguimiento }`. |
-| GET | `/api/public/pedidos/{codigoSeguimiento}/estado-pago` | Estado del pedido/pago + resumen para que el cliente lo siga. |
-| POST | `/api/public/locales/{slug}/cupones/validar` | Valida un cupón contra un subtotal. `[AllowAnonymous]`. |
-| GET | `/api/MercadoPago/oauth/callback` | Callback OAuth de MP. `[AllowAnonymous]` (seguridad por `state`). Redirige al front admin. |
-| POST | `/api/MercadoPago/webhook` | Webhook de pagos de MP. `[AllowAnonymous]` (seguridad por firma HMAC). Siempre responde 200 salvo error grave. |
-| POST | `/api/MercadoPago/dev/simular-webhook-aprobado` | **Solo Development**: simula un pago aprobado. `[AllowAnonymous]`. |
+| GET | `/api/public/locales/{slug}/menu` | Catálogo público: datos del negocio, categorías con productos disponibles, variantes, extras, imágenes y descuentos a pedido completo. |
+| GET | `/api/public/pedidos/{codigoSeguimiento}/estado-pago` | Estado del pedido y del pago, más el resumen. |
+| POST | `/api/public/locales/{slug}/pedidos` | Crea pedido. Devuelve `PedidoCreateResponseDTO` con `ResumenWhatsApp` y `CodigoSeguimiento`. Definido en `PedidosController` con ruta absoluta. |
+| POST | `/api/public/locales/{slug}/pedidos/{pedidoId}/preferencia-mp` | Crea la preferencia de pago. Body: `{ codigoSeguimiento }`. |
+| POST | `/api/public/locales/{slug}/cupones/validar` | Valida cupón contra un subtotal. `[AllowAnonymous]` en `CuponesController`. |
+| GET | `/api/MercadoPago/oauth/callback` | Callback OAuth. `[AllowAnonymous]`; la seguridad la da el `state`. Redirige al front admin. |
+| POST | `/api/MercadoPago/webhook` | Webhook de pagos. `[AllowAnonymous]`; la seguridad la da la firma HMAC. Responde 200 salvo error grave. |
+| POST | `/api/MercadoPago/dev/simular-webhook-aprobado` | **Solo Development**: simula un pago aprobado. |
 
-### Privados (admin — requieren JWT `Bearer`)
-**Administrador**
+> Los endpoints públicos de pedidos y cupones viven en controllers con `[Authorize]` a nivel de clase, pero se declaran con ruta absoluta y, en el caso de cupones, con `[AllowAnonymous]` explícito. En `PedidosController` el `[Authorize]` está por acción, no en la clase.
+
+### Privados (JWT `Bearer`)
+
+**Administrador** — `[Authorize]` a nivel de clase
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/api/Administrador` | Lista todos los administradores. ⚠ ver §8. |
-| GET | `/api/Administrador/{id}` | Obtiene un admin. |
-| POST | `/api/Administrador` | Crea admin (recibe entidad cruda). ⚠ ver §8. |
-| PUT | `/api/Administrador/{id}` | Actualiza admin (entidad cruda). ⚠ ver §8. |
-| DELETE | `/api/Administrador/{id}` | Elimina admin. ⚠ ver §8. |
-| PATCH | `/api/Administrador/{id}/local` | Patch parcial de datos del local. Verifica `id == adminId` del token. |
+| GET | `/api/Administrador/{id}` | Obtiene el negocio. Valida pertenencia y devuelve un DTO sin secretos. |
+| PATCH | `/api/Administrador/{id}/local` | Patch parcial. Verifica `id == adminId` del token. |
 
-**Categorías / Productos / Extras**
+> Este controller se redujo deliberadamente. El listado de todos los administradores y el CRUD que recibía la entidad cruda se eliminaron en el commit `1a43c79`.
+
+**Catálogo**
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET/POST | `/api/Categorias` | Lista (con imagen) / crea categoría. |
-| GET/PUT/DELETE | `/api/Categorias/{id}` | Obtiene / actualiza / elimina categoría (borra sus imágenes). |
-| PATCH | `/api/Categorias/reordenar` | Reordena todas las categorías del admin (`{ orderedIds }`). |
-| GET/POST | `/api/Productos` | Lista (con imágenes) / crea producto. |
-| GET/PUT/DELETE | `/api/Productos/{id}` | Obtiene / actualiza / elimina producto. |
+| GET / POST | `/api/Categorias` | Lista (con imagen) / crea. |
+| GET / PUT / DELETE | `/api/Categorias/{id}` | Obtiene / actualiza / elimina (borra también sus imágenes). |
+| PATCH | `/api/Categorias/reordenar` | Reordena todas las del tenant (`{ orderedIds }`). |
+| GET / POST | `/api/Productos` | Lista (con imágenes) / crea. |
+| GET / PUT / DELETE | `/api/Productos/{id}` | Obtiene / actualiza / elimina. |
 | PATCH | `/api/Productos/{id}/disponibilidad` | Cambia disponibilidad. |
-| GET | `/api/ProductoExtra` | Lista extras del admin. |
-| GET | `/api/ProductoExtra/{id}` | Obtiene extra. |
+| GET / POST | `/api/ProductoExtra` | Lista / crea. |
+| GET / PUT / DELETE | `/api/ProductoExtra/{id}` | Obtiene / actualiza / elimina. |
 | GET | `/api/ProductoExtra/por-producto/{productoId}` | Extras de un producto. |
-| POST/PUT/DELETE | `/api/ProductoExtra` / `/{id}` | CRUD de extra. |
 
-**Variantes / Stock**
+**Variantes y stock**
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET/POST | `/api/Productos/{productoId}/tipos-variante` | Lista / crea tipo de variante (máx 2). |
-| PUT/DELETE | `/api/Productos/{productoId}/tipos-variante/{id}` | Edita / elimina tipo. |
-| GET/POST | `/api/tipos-variante/{tipoId}/opciones` | Lista / crea opción de variante. |
-| PUT/DELETE | `/api/tipos-variante/{tipoId}/opciones/{id}` | Edita / elimina opción. |
-| GET | `/api/Productos/{productoId}/variantes` | Lista variantes del producto. |
-| POST | `/api/Productos/{productoId}/variantes/generar` | Genera combinaciones de variantes. |
-| DELETE | `/api/Productos/{productoId}/variantes` | Elimina todas las variantes del producto. |
-| PUT | `/api/Variantes/{varianteId}` | Edita precio/stock/disponible/sku. |
-| DELETE | `/api/Variantes/{varianteId}` | Elimina una variante (falla si tiene pedidos). |
-| GET | `/api/Productos/{productoId}/stock` | Estado de stock + últimos movimientos. |
-| POST | `/api/Productos/{productoId}/stock/ajustar` | Ajusta stock a un valor. |
-| POST | `/api/Productos/{productoId}/stock/agregar` | Repone (suma) stock. |
-| GET | `/api/Stock/alertas` | Productos/variantes con stock bajo o agotado. |
+| GET / POST | `/api/Productos/{productoId}/tipos-variante` | Lista / crea (máx 2). |
+| PUT / DELETE | `/api/Productos/{productoId}/tipos-variante/{id}` | Edita / elimina. |
+| GET / POST | `/api/tipos-variante/{tipoId}/opciones` | Lista / crea opción. |
+| PUT / DELETE | `/api/tipos-variante/{tipoId}/opciones/{id}` | Edita / elimina opción. |
+| GET | `/api/Productos/{productoId}/variantes` | Lista combinaciones. |
+| POST | `/api/Productos/{productoId}/variantes/generar` | Genera por combinatoria. |
+| DELETE | `/api/Productos/{productoId}/variantes` | Elimina todas. |
+| PUT / DELETE | `/api/Variantes/{varianteId}` | Edita precio/stock/disponible/sku · elimina (falla si tiene pedidos). |
+| GET | `/api/Productos/{productoId}/stock` | Estado + últimos movimientos. |
+| POST | `/api/Productos/{productoId}/stock/ajustar` | Fija el stock a un valor. |
+| POST | `/api/Productos/{productoId}/stock/agregar` | Repone. |
+| GET | `/api/Stock/alertas` | Stock bajo o agotado según `StockBajoAlerta`. |
 
-**Descuentos / Cupones**
+**Promociones**
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/api/Descuentos?activo=` | Lista descuentos. |
-| GET/POST/PUT | `/api/Descuentos` / `/{id}` | Obtiene / crea / actualiza descuento. |
-| GET | `/api/Cupones?activo=` | Lista cupones. |
-| GET/POST/PUT | `/api/Cupones` / `/{id}` | Obtiene / crea / actualiza cupón. |
-| GET | `/api/Cupones/{id}/metricas` | Métricas de uso del cupón. |
+| GET / POST | `/api/Descuentos` | Lista (filtro `activo`) / crea. |
+| GET / PUT | `/api/Descuentos/{id}` | Obtiene / actualiza. |
+| GET / POST | `/api/Cupones` | Lista (filtro `activo`) / crea. |
+| GET / PUT | `/api/Cupones/{id}` | Obtiene / actualiza. |
+| GET | `/api/Cupones/{id}/metricas` | Métricas de uso. |
+
+> Ni `Descuento` ni `Cupon` tienen DELETE. Se desactivan con el flag `Activo` vía update, para no romper el historial de pedidos que los referencian.
 
 **Pedidos**
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/api/Pedidos?estado=&desde=&hasta=&formaPago=&formaEntrega=` | Lista pedidos del admin (filtros). |
-| GET | `/api/Pedidos/{id}` | Detalle del pedido (con desglose de totales y MP). |
-| PATCH | `/api/Pedidos/{id}/estado` | Cambia estado (descuenta/repone stock, maneja cupón). |
-| PUT | `/api/Pedidos/{id}` | **PUT viejo** que reemplaza la entidad Pedido. ⚠ ver §6/§8. |
-| GET | `/api/Pedidos/{id}/resumen` | Resumen WhatsApp del pedido. |
-| GET | `/api/Pedidos/{id}/comanda` | Comanda (cocina). |
-| GET | `/api/Pedidos/{id}/ticket` | Ticket (con totales y vuelto). |
-| GET/POST | `/api/Pedidos/{id}/comentarios` | Lista / agrega comentario interno. |
+| GET | `/api/Pedidos?estado=&desde=&hasta=&formaPago=&formaEntrega=` | Lista con filtros. |
+| GET | `/api/Pedidos/{id}` | Detalle con desglose de totales y datos de MP. |
+| PATCH | `/api/Pedidos/{id}/estado` | Cambia estado: descuenta o repone stock y gestiona el cupón. |
+| GET | `/api/Pedidos/{id}/resumen` | Resumen para WhatsApp. |
+| GET | `/api/Pedidos/{id}/comanda` | Vista de preparación. |
+| GET | `/api/Pedidos/{id}/ticket` | Ticket con totales y vuelto. |
+| GET / POST | `/api/Pedidos/{id}/comentarios` | Lista / agrega nota interna. |
 
-**Imágenes / MercadoPago / Reportes**
+> El `PUT /api/Pedidos/{id}` legado —que reemplazaba la entidad completa sin validar pertenencia ni recalcular totales— se eliminó en el commit `69e75ed`.
+
+**Imágenes, Mercado Pago y reportes**
+
 | Método | Ruta | Qué hace |
 |---|---|---|
-| POST | `/api/Imagenes/upload` | Sube imagen (multipart): `file`, `tipo`, `entidadId`, `orden`. |
-| DELETE | `/api/Imagenes/{id}` | Borra imagen. |
-| GET | `/api/Imagenes?tipo=&entidadId=` | Lista imágenes por entidad. |
-| GET | `/api/MercadoPago/oauth/url` | URL de autorización OAuth para conectar MP. |
-| POST | `/api/MercadoPago/desconectar` | Desconecta MP del admin. |
-| GET | `/api/MercadoPago/estado` | Estado de conexión MP. |
-| GET | `/api/MercadoPago/diagnostico` | Diagnóstico (token expirado, pedidos pendientes con MP). |
-| GET | `/api/Reportes/dashboard?periodo=mes` | Dashboard de ventas. |
+| POST | `/api/Imagenes/upload` | Multipart: `file`, `tipo`, `entidadId`, `orden`. |
+| GET | `/api/Imagenes?tipo=&entidadId=` | Lista por entidad. |
+| DELETE | `/api/Imagenes/{id}` | Elimina. |
+| GET | `/api/MercadoPago/oauth/url` | URL de autorización. |
+| POST | `/api/MercadoPago/desconectar` | Desvincula la cuenta. |
+| GET | `/api/MercadoPago/estado` | Estado de conexión. |
+| GET | `/api/MercadoPago/diagnostico` | Token expirado, pedidos pendientes con MP. |
+| GET | `/api/Reportes/dashboard?periodo=` | Períodos: `hoy`, `semana`, `mes`, `anio`. |
 
-**SignalR:** `/hubs/pedidos` — métodos `JoinAdminGroup(adminId)` / `LeaveAdminGroup(adminId)`; eventos servidor→cliente `NuevoPedido`, `PagoConfirmado`.
-
-**Sin `[Authorize]` (efectivamente públicos):** `DetallePedidoController` (`/api/DetallePedido*`) y `DetallePedidoExtraController` (`/api/DetallePedidoExtra*`) — CRUD de detalles sin auth ni scoping por tenant. ⚠ ver §8.
+**SignalR:** `/hubs/pedidos`. Eventos servidor → cliente: `NuevoPedido` (desde `PedidoService`), `PagoConfirmado` (desde `MercadoPagoService`, dos puntos de emisión).
 
 ---
 
-## 6. Decisiones y deudas técnicas (vistas en el código)
+## 6. Subsistemas
 
-1. **Slug derivado, no persistido.** El slug del local se calcula desde `NombreLocal` en tiempo de request. Renombrar el local rompe todos los links públicos. Además dos locales con nombres que difieren solo en acentos/espacios pueden colisionar.
+### 6.1 SignalR
 
-2. **Dos algoritmos de slug distintos** (inconsistencia real):
-   - `PublicController.GetMenu` y `MercadoPagoService.CrearPreferenciaPago`: `NombreLocal.ToLower().Replace(" ", "-")` ejecutado en **SQL**, **sin** quitar acentos.
-   - `PedidoService.CrearPublicoPorSlug` y `CuponService`: método `Slugify()` en **memoria** que **sí** quita acentos (á→a, ñ→n) y colapsa espacios/guiones.
-   - Consecuencia: para un local con acentos (ej. "Café León"), el slug del **menú** (`café-león`) difiere del slug que acepta el endpoint de **crear pedido** (`cafe-leon`). Hay que unificar.
+`PedidosHub` tiene `[Authorize]` a nivel de clase. En `OnConnectedAsync` **deriva el grupo del claim `adminId` del token** y suscribe la conexión ahí. No expone métodos `JoinGroup`/`LeaveGroup` invocables por el cliente: si los expusiera, cualquier token válido podría suscribirse al grupo de otro tenant y recibir sus pedidos en vivo. SignalR remueve la conexión de sus grupos al desconectarse, así que no hace falta limpieza manual.
 
-3. **PUT viejo de pedidos** (`PUT /api/Pedidos/{id}`): reemplaza la entidad `Pedido` completa, **sin** validar pertenencia al `adminId` del token (solo `[Authorize]`) y sin recálculo de totales/stock. Endpoint legado peligroso.
+El handshake de WebSocket no puede llevar el header `Authorization`. `Program.cs` lo resuelve con `JwtBearerEvents.OnMessageReceived`, que lee el token del query string `access_token` **solo** si el path empieza con `/hubs`.
 
-4. **`costoEnvio` no se persiste como columna.** Se incluye dentro de `Pedido.Total`. Luego se **reconstruye por resta** en varios lugares y con **fórmulas distintas**:
-   - `PedidosController.Get(id)`: `Total - (subtotal con descuentos) - (extras)`.
-   - `PedidoService.GetTicketAsync`: `Total - subtotal + MontoDescuentoCupon`.
-   - `GenerarResumenWhatsApp`: `Total - (subtotalBruto - descProductos - descCupón)`.
-   Frágil ante cambios; conviene persistir `CostoEnvio` en el pedido.
+### 6.2 Cifrado (`EncryptionHelper`)
 
-5. **Almacenamiento de imágenes: solo Local (disco).** `IStorageProvider` tiene una sola implementación, `LocalStorageProvider`, que escribe en `ContentRootPath/uploads` y sirve por `/uploads`. Hay config `Storage:Provider` ("Local") pero **no existe** proveedor Blob. En Azure App Service el disco es efímero → las imágenes pueden perderse en restart/redeploy.
+AES-GCM 256 bits. Clave desde `Encryption:Key`, base64 de exactamente 32 bytes; si no, lanza excepción en el constructor (falla al arrancar, no en runtime).
 
-6. **Filtros globales multi-tenant comentados** en `AppDbContext` (no se usa `HasQueryFilter`). El aislamiento depende de filtrar `AdministradorId` manualmente en cada query.
+- Nonce aleatorio de 12 bytes por operación, tag de 16 bytes
+- Formato almacenado: `nonce + tag + ciphertext`, en base64
+- Se eligió GCM sobre CBC por ser cifrado autenticado: detecta manipulación del ciphertext
 
-7. **Capa de repos parcial.** Conviven repos y acceso directo a `AppDbContext` desde controllers/services. No hay convención única.
+Se usa para `MercadoPagoAccessToken` y `MercadoPagoRefreshToken` en la tabla `Administrador`.
 
-8. **Feature de actualización masiva de precios sin terminar**: existen `PreviewActualizacionPrecios`/`...Item` (modelos, DbSets, migración) pero **ningún** controller/servicio los usa.
+> **Consecuencia operativa:** rotar `Encryption:Key` invalida todo lo ya cifrado. Requiere un script de recifrado, o forzar a todos los negocios a reconectar Mercado Pago.
 
-9. **MercadoPago — refresh token no usado.** Se guarda `MercadoPagoRefreshToken` (cifrado) y `MercadoPagoTokenExpiresAt`, pero no hay flujo de renovación; el diagnóstico solo informa `TokenExpirado`.
+### 6.3 Mercado Pago
 
-10. **Webhook MP — token de app por `client_credentials`.** Para resolver el pedido a partir del `paymentId`, el service obtiene un token de la app y consulta `/v1/payments/{id}`; el propio comentario en el código reconoce que el enfoque es discutible. Idempotencia garantizada por índice único `(PaymentId, Status)`.
+**OAuth:** `GetOAuthUrl` genera un `state` aleatorio de 32 bytes en base64url, lo guarda en `IMemoryCache` como `mp_oauth_state:{state}` → `adminId` con TTL, y arma la URL de autorización. `ProcesarCallback` valida el `state` contra el cache, lo **elimina** (uso único), intercambia el `code` por tokens y los persiste cifrados.
 
-11. **Pagos rechazados** dejan el pedido en `Pendiente` (decisión explícita comentada en `ProcesarWebhookPago`).
+**Preferencias:** `CrearPreferenciaPago` descifra el access token del negocio y crea la preferencia con `back_urls` de success/failure/pending que apuntan al frontend. `TruncarStatementDescriptor` normaliza el nombre del negocio a máximo 22 caracteres alfanuméricos para el resumen de la tarjeta.
 
-12. **Naming de tipos inconsistente entre Descuento y Cupon.** Cupón usa `"Porcentaje"`/`"MontoFijo"`; Descuento usa `"Porcentaje"`/(else = monto fijo). El `DescuentoCalculatorService` trata cualquier `Tipo != "Porcentaje"` como monto fijo. (verificar valores exactos que escribe `DescuentoService`.)
+**Webhook:** valida la firma HMAC del header `x-signature` (formato `ts=...,v1=...`) contra `MercadoPago:WebhookSecret`. La idempotencia la da el índice único `(PaymentId, Status)`, no un chequeo en código. Guarda el payload crudo en `RawWebhookData`. Al confirmar un pago emite `PagoConfirmado` por SignalR.
 
-13. **`[Required, MaxLength(30)] DateTime Fecha`** en `Pedido`: `MaxLength` sobre `DateTime` no tiene efecto (anotación inútil, no rompe).
+**Estado de la integración:** funcional, con tres huecos conocidos (ver §8).
 
-14. **Seed admin en `Program.cs`** corre en cualquier entorno (incluido producción) si la tabla está vacía, y crea un admin con credenciales fijas y `NombreLocal` vacío. Ver §8.
+### 6.4 Almacenamiento e imágenes
 
-15. **Deploy.** No hay `.github/workflows`. El CI/CD es **Azure Pipelines** (`azure-pipelines.yml`, en raíz y duplicado dentro del proyecto): build .NET 9 en `windows-2022`, `VSBuild` con WebDeploy package, y deploy a Azure Web App `vinto-carripollo-api-dev` (suscripción `Azure-Vinto`). Trigger en `main`.
+`IStorageProvider` con dos implementaciones. `Program.cs` registra `AzureBlobStorageProvider` si `Storage:Provider == "AzureBlob"` (comparación case-insensitive); cualquier otro valor o su ausencia cae en `LocalStorageProvider`.
 
----
+- `LocalStorageProvider` escribe en `ContentRootPath/{Storage:Local:BasePath}` (default `uploads`), servido por static files en `/uploads`. **En App Service el disco es efímero:** solo sirve para desarrollo.
+- `AzureBlobStorageProvider` requiere `Storage:AzureBlob:ConnectionString` y `:ContainerName`; falla en el constructor si falta alguno. Devuelve la URI del blob.
 
-## 7. Cómo correr local
+`ImagenService.UploadAsync` normaliza toda imagen entrante:
+1. Valida content type contra lista blanca: `image/jpeg`, `image/png`, `image/webp`, `image/gif`
+2. Rechaza si supera 5 MB
+3. Redimensiona a 1200px de ancho máximo (`ResizeMode.Max`, solo si excede)
+4. Convierte a **WebP** con calidad 85
+5. Nombre de archivo: `{GUID}.webp` — nunca se usa el nombre original en disco
 
-Requisitos: **.NET 9 SDK** y **SQL Server** (la cadena por defecto apunta a `localhost\SQLEXPRESS`, base `EatExperienceDb`, `Trusted_Connection`).
+El nombre original se guarda solo como metadato en `Imagen.NombreOriginal`.
 
-1. **Configuración.** En `Eat_Experience/Eat_Experience/`, partir de `appsettings.Example.json` y crear `appsettings.Development.json` (no se commitea con valores reales). Claves necesarias:
-   - `ConnectionStrings:DefaultConnection`
-   - `JwtSettings:Key` (≥ 16 bytes), `JwtSettings:Issuer`, `JwtSettings:Audience`, `JwtSettings:ExpirationInMinutes`
-   - `AdminRegistroKey` (clave para habilitar `POST /api/Auth/register`)
-   - `Encryption:Key` (**32 bytes en base64** — requerido por `EncryptionHelper`; si falta, la app lanza excepción al usar MP)
-   - `MercadoPago:ClientId`, `:ClientSecret`, `:RedirectUri`, `:AuthBaseUrl`, `:ApiBaseUrl`, `:FrontendClientUrl`, `:FrontendAdminUrl`, `:BackendUrl` (la mayoría son **requeridos**; el service/controller lanza excepción al iniciar/usar si faltan)
-   - `Storage:Provider` (`Local`), `Storage:Local:BasePath` (`uploads`)
+### 6.5 Descuentos (`DescuentoCalculatorService`)
 
-   > Todos referenciados por **nombre**, sin valores. No commitear secretos reales.
+Orden de aplicación, explícito y determinista:
 
-2. **Base de datos / migraciones** (desde `Eat_Experience/Eat_Experience/`):
-   ```
-   dotnet tool install --global dotnet-ef   # si no está
-   dotnet ef database update
-   ```
-   (No hay `Database.Migrate()` en `Program.cs`: aplicar migraciones manualmente.)
+1. Descuentos de **producto**, ordenados por `FechaCreacion` ascendente
+2. Descuentos de **categoría**, sobre el precio ya reducido, mismo criterio de orden
+3. Descuentos a **pedido completo**, sobre el subtotal posterior a los ítems
 
-3. **Ejecutar:**
-   ```
-   dotnet run
-   ```
-   Perfiles de `launchSettings.json`: HTTP `http://localhost:5202`, HTTPS `https://localhost:7288;http://localhost:5202` (también un perfil IIS Express en `:62159`). `ASPNETCORE_ENVIRONMENT=Development`.
+El orden por `FechaCreacion` evita que el resultado dependa del orden en que SQL devuelva las filas. Hay dos *clamps*: el precio unitario nunca baja de 0.01 y el subtotal global no queda negativo. `MontoDescuentoPedidoCompleto` refleja la reducción **real** después del clamp, no la nominal.
 
-4. **Swagger:** disponible solo en Development en `/swagger` (es el `launchUrl`). Soporta auth `Bearer` y header `X-Admin-Key`.
+`Descuento.Tipo` se trata como porcentaje si es exactamente `"Porcentaje"`; cualquier otro valor se interpreta como monto fijo. `Cupon.Tipo` en cambio usa `"Porcentaje"`/`"MontoFijo"` explícitos. Los dos criterios no son idénticos. **(verificar qué valores escribe exactamente `DescuentoService`)**
 
-5. **Admin semilla:** si la tabla `Administradores` está vacía al arrancar, `Program.cs` crea uno: email `admin@ejemplo.com`, password `123456`, sin `NombreLocal`/sin local configurado. Sirve para login inicial; completar datos del local vía `PATCH /api/Administrador/{id}/local`. Para crear admins reales con local, usar `POST /api/Auth/register` con `X-Admin-Key`.
+### 6.6 Stock (`StockService`)
 
----
+Tres operaciones, todas registrando un `MovimientoStock` con stock anterior y nuevo:
 
-## 8. Bugs / cosas a revisar
+- `DescontarStock` — al confirmar el pedido
+- `ReponerStock` — al cancelar
+- `AjustarStock` — fija un valor absoluto
 
-1. **Creación de pedido público puede dar 500 con datos incompletos.** En `PedidoService.CrearPublicoPorSlug`, `request.NombreCliente` y `request.TelefonoCliente` son **nullable** en el DTO (`PedidoPublicCreateRequestDTO`), pero `Pedido.NombreCliente`/`TelefonoCliente` son `[Required]` (NOT NULL). Si llegan `null`, `SaveChanges` falla con violación de NOT NULL → **500** (se devuelve como "Error al crear el pedido"). Falta validar estos campos antes de construir el pedido.
+Funciona tanto sobre stock simple del producto como sobre el de una variante (`varianteId` nullable). Si `AutoDeshabilitarSinStock` está activo, al llegar a 0 el producto se marca no disponible.
 
-2. **Posibles null del local en el resumen/checkout.** El flujo asume datos del local presentes. Casos a verificar:
-   - Admin semilla tiene `NombreLocal` vacío → su **slug es vacío**; ningún endpoint público por slug lo resuelve (no se puede pedir contra ese local).
-   - `CrearPreferenciaPago` usa el slug con `Replace(" ", "-")` mientras los pedidos se crean con `Slugify()` (acentos): para locales con acentos el `pedidoId` existe pero el slug del checkout puede no matchear (ver §6.2).
+### 6.7 Reportes (`ReporteService`)
 
-3. **Endpoints sin autorización ni tenant-scoping.** `DetallePedidoController` y `DetallePedidoExtraController` **no tienen `[Authorize]`**: cualquiera puede listar/crear/editar/borrar detalles de pedido por id. Riesgo de seguridad e integridad. Revisar si deben eliminarse o protegerse.
+Único reporte: dashboard de ventas. Períodos aceptados: `hoy`, `semana`, `mes`, `anio`; cualquier otro valor lanza excepción con el listado válido.
 
-4. **`AdministradorController` POST/PUT/DELETE sin chequeo de pertenencia.** Están bajo `[Authorize]` pero **cualquier admin autenticado** puede `GET`/`PUT`/`DELETE` **otros** administradores por id (solo `PATCH .../local` valida `id == token`). Además `POST`/`PUT` reciben la **entidad `Administrador` cruda**: el `PasswordHash` no se hashea (se persiste tal cual venga) y se pueden setear campos sensibles (tokens MP, `EsActivo`, etc.). Recomendado: restringir a self o a rol, y no exponer la entidad.
-
-5. **`PUT /api/Pedidos/{id}` legado** sin validar `adminId` ni recalcular totales/stock (ver §6.3). Permite a un admin sobrescribir cualquier pedido por id.
-
-6. **Secretos commiteados en `appsettings.json`.** El `appsettings.json` versionado contiene un **valor real** de `JwtSettings:Key` y una connection string. Aunque `AdminRegistroKey` está vacío y MP/Encryption no están ahí, **el JWT key real está en el repo** → debería rotarse y removerse del control de versiones (mover a `appsettings.Development.json`/App Settings/secrets). *(No se reproduce el valor aquí a propósito.)*
-
-7. **Seed admin en producción.** El bloque de seed en `Program.cs` no está condicionado a `IsDevelopment()`: en una DB productiva vacía crearía `admin@ejemplo.com / 123456`. Riesgo de acceso por credenciales conocidas. Condicionar a Development o quitar.
-
-8. **`CrearConDetalles` (PedidoRequestDTO) legado.** Existe en `PedidoService` un flujo de creación antiguo (`CrearConDetalles`) que no aplica descuentos/cupón/stock/envío y no setea `CodigoSeguimiento`. (verificar si algún endpoint lo expone — no se encontró su uso en los controllers revisados.)
-
-9. **Reposición de stock al cancelar** ignora errores silenciosamente (loguea y sigue), lo que puede dejar stock inconsistente si falla a mitad. Revisar si debería ser transaccional.
-
-10. **`GETUTCDATE()` como default + asignación manual de `DateTime.UtcNow`.** Conviven defaults SQL y asignaciones en C#; coherente, pero verificar que no haya doble criterio de zona horaria (los reportes sí convierten a TZ Argentina).
+Es el único subsistema con manejo explícito de zona horaria: resuelve `TimeZoneInfo` de Argentina una vez en un campo estático, convierte UTC → Argentina para calcular los rangos, y de vuelta a UTC para consultar. Sin esto, "ventas de hoy" arrancaría a las 21:00 del día anterior.
 
 ---
 
-### Resumen de hallazgos inesperados / a medio hacer
-- **Feature de actualización masiva de precios**: solo el esquema de datos, sin lógica ni endpoints (❌).
-- **Dos slugs distintos** para el mismo local (menú vs. pedido/cupón) por acentos → bug latente de "no encuentra el local".
-- **`costoEnvio` no persistido**, reconstruido por resta con fórmulas distintas en ticket/detalle/resumen.
-- **Controllers de detalle de pedido sin `[Authorize]`** y **AdministradorController sin self-check** → huecos de seguridad.
-- **JWT key real commiteado** en `appsettings.json`.
-- **Seed admin con credenciales fijas** sin condicionar a Development.
-- **MercadoPago**: refresh token guardado pero no renovado; webhook resuelve el pedido con token de app (`client_credentials`) — enfoque marcado como provisional en comentarios.
-- **Deploy por Azure Pipelines** (no GitHub Actions); `azure-pipelines.yml` está duplicado (raíz y dentro del proyecto).
+## 7. Configuración y entorno
+
+### Claves requeridas
+
+| Clave | Requerida | Notas |
+|---|---|---|
+| `ConnectionStrings:DefaultConnection` | Sí | SQL Server. Command timeout 180s configurado en código. |
+| `JwtSettings:Key` | Sí | HMAC-SHA256. Falla al arrancar si falta. |
+| `JwtSettings:Issuer` / `:Audience` | Sí | Validados en cada request. |
+| `JwtSettings:ExpirationInMinutes` | Sí | — |
+| `AdminRegistroKey` | Sí | Habilita `POST /api/Auth/register`. |
+| `Encryption:Key` | Sí | 32 bytes en base64. Falla al construir el helper si no. |
+| `MercadoPago:ClientId` / `:ClientSecret` | Para pagos | — |
+| `MercadoPago:WebhookSecret` | Para pagos | Validación de firma. |
+| `MercadoPago:RedirectUri` / `:BackendUrl` | Para pagos | Deben ser URLs públicas. |
+| `MercadoPago:AuthBaseUrl` / `:ApiBaseUrl` | Para pagos | — |
+| `MercadoPago:FrontendAdminUrl` / `:FrontendClientUrl` | Para pagos | Destino de las redirecciones. |
+| `Storage:Provider` | No | `"AzureBlob"` o cualquier otro valor → local. |
+| `Storage:Local:BasePath` | No | Default `uploads`. |
+| `Storage:AzureBlob:ConnectionString` / `:ContainerName` | Si `Provider=AzureBlob` | Falla al construir el provider si faltan. |
+
+> **`appsettings.Example.json` está incompleto.** Solo cubre `ConnectionStrings`, `JwtSettings`, `AdminRegistroKey`, `Logging` y `AllowedHosts`. Le faltan `Encryption`, `MercadoPago` y `Storage`. Alguien que siga solo ese archivo no logra levantar el proyecto con pagos ni con Blob Storage. **Pendiente de completar.**
+
+### Perfiles locales
+
+`launchSettings.json`: HTTP en `http://localhost:5202`, HTTPS en `https://localhost:7288;http://localhost:5202`, más un perfil IIS Express en `:62159`. `ASPNETCORE_ENVIRONMENT=Development`, `launchUrl` = `swagger`.
+
+### Migraciones
+
+22 migraciones, de `20250512004358_InitialCreate` a `20260611235002_AddOrdenToCategoria`. La evolución del esquema se lee como la del producto: pedidos y detalles → multi-tenancy (`20250915224651_multitenant-v1`) → dirección y envío → comentarios → imágenes → variantes y stock → descuentos y cupones → Mercado Pago en tres pasos → orden de categorías.
+
+**No hay `Database.Migrate()` en `Program.cs`**: las migraciones se aplican manualmente con `dotnet ef database update`.
+
+### Seed
+
+Bloque al final de `Program.cs`, **condicionado a `IsDevelopment()`**. Si la tabla `Administradores` está vacía crea un admin de prueba con credenciales fijas y `NombreLocal` vacío (por lo tanto, slug vacío: ningún endpoint público lo resuelve). Para crear negocios reales, usar `POST /api/Auth/register`.
+
+---
+
+## 8. Deuda técnica y bugs conocidos
+
+Ordenado por impacto.
+
+1. **Filtros multi-tenant manuales.** `HasQueryFilter` comentado en `AppDbContext`. Toda consulta debe filtrar `AdministradorId` a mano; un olvido es fuga entre tenants. **Prioridad máxima.**
+
+2. **Dos algoritmos de slug incompatibles.** Bug real, reproducible:
+   - `PublicController.GetMenu` y `MercadoPagoService.CrearPreferenciaPago` resuelven en **SQL**: `NombreLocal.ToLower().Replace(" ", "-")`, **sin** quitar acentos.
+   - `PedidoService.CrearPublicoPorSlug` y `CuponService` usan `Slugify()` en **memoria**, que sí normaliza acentos (á→a, ñ→n) y colapsa espacios y guiones bajos.
+   - Para un negocio llamado "Café León": el menú se sirve en `café-león` pero crear el pedido exige `cafe-leon`. El comprador ve la carta y no puede comprar.
+
+3. **Slug derivado, no persistido.** Se calcula desde `NombreLocal` en cada request. Renombrar el negocio rompe todos los links públicos existentes. Además dos negocios cuyos nombres difieran solo en acentos o espacios pueden colisionar. Corresponde persistir una columna `Slug` única e indexada.
+
+4. **Pedido público puede devolver 500 con datos incompletos.** `PedidoPublicCreateRequestDTO.NombreCliente` y `.TelefonoCliente` son `string?`, pero `Pedido.NombreCliente`/`.TelefonoCliente` son `[Required]` (NOT NULL en la base). `CrearPublicoPorSlug` valida cantidad, producto, variante, forma de pago y dirección de delivery, **pero no valida estos dos campos**. Si llegan `null`, `SaveChanges` falla con violación de NOT NULL y sale como 500 genérico. *(Verificado: sigue presente.)*
+
+5. **`CostoEnvio` no se persiste como columna.** Va sumado dentro de `Pedido.Total` y se reconstruye por resta en tres lugares, con fórmulas que no coinciden:
+   - `PedidosController.Get(id)`: `Total - subtotalConDescuentos - extras`
+   - `PedidoService.GetTicketAsync`: `Total - subtotal + MontoDescuentoCupon`
+   - `GenerarResumenWhatsApp`: `Total - (subtotalBruto - descProductos - descCupón)`
+
+   Frágil ante cualquier cambio en el cálculo de totales.
+
+6. **Mercado Pago: sin renovación de token.** `MercadoPagoRefreshToken` se guarda cifrado y `MercadoPagoTokenExpiresAt` se registra, pero **no existe ningún flujo que use el refresh token**. Al expirar, `GET /api/MercadoPago/diagnostico` lo informa y el negocio debe reconectar a mano.
+
+7. **Webhook resuelve el pago con token de aplicación.** Para asociar un `paymentId` a un pedido, `ProcesarWebhookPago` pide un token por `client_credentials` y consulta `/v1/payments/{id}`. El comentario en el código reconoce que es la "opción C" y que es discutible. Lo correcto sería resolver el tenant desde el payload y usar su propio token.
+
+8. **Pagos rechazados dejan el pedido en `Pendiente`.** Decisión deliberada y comentada, para no cancelar pedidos que el comprador puede reintentar. Falta un estado que refleje el intento fallido.
+
+9. **`state` del OAuth en `IMemoryCache`.** No sobrevive a reinicios del proceso ni funciona con más de una instancia: el callback falla porque el `state` no está en el cache de la instancia que atiende. Corresponde almacenamiento distribuido.
+
+10. **Capa de repositorios parcial.** Repos y acceso directo a `AppDbContext` conviven sin convención.
+
+11. **Actualización masiva de precios sin implementar.** `PreviewActualizacionPrecios` y `PreviewActualizacionPreciosItem` tienen modelos, `DbSet`, configuración en `OnModelCreating` y migración aplicada, pero **ningún** controller ni service los usa.
+
+12. **Naming inconsistente entre `Descuento` y `Cupon`.** Ver §6.5.
+
+13. **`[Required, MaxLength(30)]` sobre `DateTime Fecha`** en `Pedido.cs:20`. `MaxLength` no tiene efecto sobre un `DateTime`. Anotación inútil, inofensiva. *(Verificado: sigue presente.)*
+
+14. **Sin revocación de tokens.** El `jti` se emite pero no se persiste ni se valida.
+
+15. **Sin tests.** No hay proyecto de tests en la solución. La deuda más grande.
+
+16. **`appsettings.Example.json` incompleto.** Ver §7.
+
+---
+
+## 9. Deploy
+
+**Azure Pipelines**, `azure-pipelines.yml` en la raíz. Ya **no** hay copia duplicada dentro del proyecto: se unificó en el commit `c9337cb`.
+
+```
+trigger: main
+pool: ubuntu-latest
+steps:
+  1. UseDotNet@2     → SDK 9.x
+  2. DotNetCoreCLI@2 → publish **/Vinto.Api.csproj, Release, zipAfterPublish
+  3. AzureWebApp@1   → suscripción 'Azure-Vinto'
+                       app 'vinto-carripollo-api-dev-linux' (webAppLinux)
+                       runtime DOTNETCORE|9.0
+                       startUpCommand 'dotnet Vinto.Api.dll'
+```
+
+Se migró de `windows-2022` + `VSBuild` + paquete WebDeploy a Linux + `dotnet publish`: más rápido, agentes más baratos, sin dependencia de MSBuild.
+
+**Configuración en producción:** Application Settings del App Service. En **Linux** el separador de secciones es doble guion bajo, no dos puntos: `JwtSettings__Key`, `Encryption__Key`, `MercadoPago__ClientSecret`, `Storage__AzureBlob__ConnectionString`.
+
+**Sin GitHub Actions.** No existe `.github/workflows`.
+
+---
+
+## 10. Higiene del repositorio
+
+**Secretos:** ningún archivo con credenciales reales está trackeado actualmente. `appsettings.json` y `appsettings.Development.json` están cubiertos por `Eat_Experience/.gitignore` (líneas 486-487). `appsettings.Example.json` sí está versionado, pero solo con placeholders.
+
+> **Historial:** hubo una fuga de credenciales por `build_temp/` (output de compilación commiteado por error) entre `b478f78` y `e990fd5`. Los archivos se eliminaron del árbol pero **siguen siendo recuperables desde el historial**, y el repositorio es público. Existe una auditoría completa fuera del repositorio con el detalle y el plan de rotación. **Rotar las credenciales es lo que revoca el acceso; borrar el archivo no.**
+
+**Archivos trackeados que no deberían estarlo:** 21 archivos bajo `.vs/` (incluidos índices de Copilot, `.suo`, `slnx.sqlite`) y `obj/Eat_Experience.csproj.EntityFrameworkCore.targets`. El `.gitignore` los cubre, pero git ignora esas reglas para archivos que ya están en el índice: hay que sacarlos con `git rm --cached`. No contienen secretos (verificado); son ruido que genera conflictos entre máquinas.
+
+**`.gitignore`:** hay dos, uno en la raíz y otro en `Eat_Experience/`. Entre ambos la cobertura es correcta y completa para `appsettings` reales, `.vs/`, `obj/`, `bin/`, `uploads/` y `build_temp/`.
