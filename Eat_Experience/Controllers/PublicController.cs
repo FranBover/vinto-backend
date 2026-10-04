@@ -14,12 +14,14 @@ namespace Vinto.Api.Controllers
         private readonly AppDbContext _context;
         private readonly IDescuentoCalculatorService _calculatorService;
         private readonly IPedidoService _pedidoService;
+        private readonly ILogger<PublicController> _logger;
 
-        public PublicController(AppDbContext context, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService)
+        public PublicController(AppDbContext context, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger)
         {
             _context = context;
             _calculatorService = calculatorService;
             _pedidoService = pedidoService;
+            _logger = logger;
         }
 
         [HttpGet("locales/{slug}/menu")]
@@ -162,7 +164,8 @@ namespace Vinto.Api.Controllers
             }
             catch (Exception ex)
             {
-                return StatusCode(500, new { mensaje = "Error consultando estado del pago.", detalle = ex.Message });
+                _logger.LogError(ex, "Error consultando estado de pago para el c�digo de seguimiento {CodigoSeguimiento}", codigoSeguimiento);
+                return StatusCode(500, new { mensaje = "Error consultando el estado del pago. Intent� nuevamente." });
             }
         }
 

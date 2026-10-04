@@ -149,6 +149,12 @@ namespace Vinto.Api.Services.Implementaciones
             if (request.Detalles == null || !request.Detalles.Any())
                 throw new InvalidOperationException("El pedido debe tener al menos un producto.");
 
+            if (string.IsNullOrWhiteSpace(request.NombreCliente))
+                throw new InvalidOperationException("Debe indicar el nombre del cliente.");
+
+            if (string.IsNullOrWhiteSpace(request.TelefonoCliente))
+                throw new InvalidOperationException("Debe indicar el teléfono del cliente.");
+
             var slugNormalized = slug.Trim().ToLowerInvariant();
 
             // EF no puede traducir Slugify() a SQL, traemos admins activos y filtramos en memoria.

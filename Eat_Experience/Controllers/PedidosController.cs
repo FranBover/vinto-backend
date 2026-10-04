@@ -192,13 +192,11 @@ namespace Vinto.Api.Controllers
             }
             catch (Exception ex)
             {
-                // Logueamos la excepci�n COMPLETA (stack trace + InnerException) antes de devolver el 500
-                // para poder diagnosticar; el middleware global tambi�n la captura, pero ac� dejamos el
-                // contexto del endpoint (slug del local) en el log.
+                // Logueamos la excepci�n COMPLETA (stack trace + InnerException) del lado del servidor;
+                // al cliente (endpoint an�nimo) solo le devolvemos un mensaje gen�rico, nunca el detalle
+                // crudo de la excepci�n (puede filtrar nombre de base, tabla o columna de SQL Server).
                 _logger.LogError(ex, "Error al crear pedido p�blico para el local con slug {Slug}", slug);
-                var mensaje = ex.InnerException?.Message ?? ex.Message;
-                return StatusCode(500, $"Error al crear el pedido: {mensaje}");
-
+                return StatusCode(500, new { mensaje = "Ocurri� un error al crear el pedido. Intent� nuevamente." });
             }
         }
 
@@ -230,8 +228,8 @@ namespace Vinto.Api.Controllers
             }
             catch (Exception ex)
             {
-                var mensaje = ex.InnerException?.Message ?? ex.Message;
-                return StatusCode(500, $"Error al crear la preferencia: {mensaje}");
+                _logger.LogError(ex, "Error al crear preferencia MP para el local con slug {Slug}, pedido {PedidoId}", slug, pedidoId);
+                return StatusCode(500, new { mensaje = "Ocurri� un error al crear la preferencia de pago. Intent� nuevamente." });
             }
         }
 
