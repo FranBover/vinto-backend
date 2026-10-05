@@ -155,6 +155,15 @@ namespace Vinto.Api.Services.Implementaciones
             if (string.IsNullOrWhiteSpace(request.TelefonoCliente))
                 throw new InvalidOperationException("Debe indicar el teléfono del cliente.");
 
+            var formasEntregaValidas = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+            {
+                "Delivery",
+                "Retira"
+            };
+
+            if (string.IsNullOrWhiteSpace(request.FormaEntrega) || !formasEntregaValidas.Contains(request.FormaEntrega))
+                throw new InvalidOperationException($"Forma de entrega inválida: '{request.FormaEntrega}'. Valores permitidos: Delivery, Retira.");
+
             var slugNormalized = slug.Trim().ToLowerInvariant();
 
             // EF no puede traducir Slugify() a SQL, traemos admins activos y filtramos en memoria.
@@ -430,12 +439,22 @@ namespace Vinto.Api.Services.Implementaciones
                 admin.NombreLocal,
                 numeroVisible);
 
+            // Igual que en PedidoDetailResponseDTO: "Subtotal" es el neto (post-descuentos),
+            // y el bruto queda aparte en SubtotalSinDescuentos. Así Subtotal + CostoEnvio == Total siempre.
+            var subtotalSinDescuentosConExtras = resultado.SubtotalSinDescuentos + subtotalExtrasTotal;
+            var montoDescuentoProductosTotal = resultado.MontoDescuentoProductos + resultado.MontoDescuentoPedidoCompleto;
+            var subtotalNeto = subtotalSinDescuentosConExtras - montoDescuentoProductosTotal - montoDescuentoCupon;
+
             return new PedidoCreateResponseDTO
             {
                 PedidoId = pedido.Id,
                 CodigoSeguimiento = codigoSeguimiento,
                 Estado = (pedidoRecargado ?? pedido).Estado,
-                Subtotal = resultado.SubtotalSinDescuentos + subtotalExtrasTotal,
+                SubtotalSinDescuentos = subtotalSinDescuentosConExtras,
+                MontoDescuentoProductos = montoDescuentoProductosTotal,
+                MontoDescuentoCupon = montoDescuentoCupon,
+                CodigoCupon = codigoCuponNorm,
+                Subtotal = subtotalNeto,
                 CostoEnvio = costoEnvio,
                 Total = (pedidoRecargado ?? pedido).Total,
                 Mensaje = "Pedido creado correctamente",

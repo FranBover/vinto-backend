@@ -32,12 +32,15 @@ namespace Vinto.Api.Services.Implementaciones
         private readonly IHubContext<PedidosHub> _hubContext;
         private readonly ILogger<MercadoPagoService> _logger;
 
-        private readonly string _clientId;
-        private readonly string _clientSecret;
-        private readonly string _redirectUri;
-        private readonly string _authBaseUrl;
-        private readonly string _apiBaseUrl;
-        private readonly string _frontendClientUrl;
+        // Nullables: el constructor ya no valida su presencia (ver RequireConfig). Se valida
+        // recién al usarse, para que la ausencia de config de MP no tumbe todo PedidosController
+        // (que inyecta IMercadoPagoService incluso para pedidos en efectivo/transferencia).
+        private readonly string? _clientId;
+        private readonly string? _clientSecret;
+        private readonly string? _redirectUri;
+        private readonly string? _authBaseUrl;
+        private readonly string? _apiBaseUrl;
+        private readonly string? _frontendClientUrl;
         private readonly string _backendUrl;
 
         private const string StateCachePrefix = "mp_oauth_state:";
@@ -63,23 +66,31 @@ namespace Vinto.Api.Services.Implementaciones
             _hubContext = hubContext;
             _logger = logger;
 
-            _clientId = configuration["MercadoPago:ClientId"]
-                ?? throw new InvalidOperationException("MercadoPago:ClientId no configurado");
-            _clientSecret = configuration["MercadoPago:ClientSecret"]
-                ?? throw new InvalidOperationException("MercadoPago:ClientSecret no configurado");
-            _redirectUri = configuration["MercadoPago:RedirectUri"]
-                ?? throw new InvalidOperationException("MercadoPago:RedirectUri no configurado");
-            _authBaseUrl = configuration["MercadoPago:AuthBaseUrl"]
-                ?? throw new InvalidOperationException("MercadoPago:AuthBaseUrl no configurado");
-            _apiBaseUrl = configuration["MercadoPago:ApiBaseUrl"]
-                ?? throw new InvalidOperationException("MercadoPago:ApiBaseUrl no configurado");
-            _frontendClientUrl = configuration["MercadoPago:FrontendClientUrl"]
-                ?? throw new InvalidOperationException("MercadoPago:FrontendClientUrl no configurado");
+            _clientId = configuration["MercadoPago:ClientId"];
+            _clientSecret = configuration["MercadoPago:ClientSecret"];
+            _redirectUri = configuration["MercadoPago:RedirectUri"];
+            _authBaseUrl = configuration["MercadoPago:AuthBaseUrl"];
+            _apiBaseUrl = configuration["MercadoPago:ApiBaseUrl"];
+            _frontendClientUrl = configuration["MercadoPago:FrontendClientUrl"];
             _backendUrl = configuration["MercadoPago:BackendUrl"] ?? "";
+        }
+
+        // Valida la clave recién al usarla (no en el constructor), para que una integración de MP
+        // mal configurada no rompa funcionalidad que no depende de MP (ver constructor).
+        private static string RequireConfig(string? value, string nombreClave)
+        {
+            if (string.IsNullOrEmpty(value))
+                throw new InvalidOperationException($"{nombreClave} no configurado");
+
+            return value;
         }
 
         public Task<OAuthUrlResponseDTO> GenerarUrlAutorizacion(int adminId)
         {
+            var authBaseUrl = RequireConfig(_authBaseUrl, "MercadoPago:AuthBaseUrl");
+            var clientId = RequireConfig(_clientId, "MercadoPago:ClientId");
+            var redirectUri = RequireConfig(_redirectUri, "MercadoPago:RedirectUri");
+
             // Generar state aleatorio (32 bytes en base64url)
             var stateBytes = new byte[32];
             RandomNumberGenerator.Fill(stateBytes);
@@ -92,12 +103,12 @@ namespace Vinto.Api.Services.Implementaciones
             _memoryCache.Set(StateCachePrefix + state, adminId, StateTtl);
 
             // Construir URL de autorización
-            var url = $"{_authBaseUrl}/authorization" +
-                      $"?client_id={_clientId}" +
+            var url = $"{authBaseUrl}/authorization" +
+                      $"?client_id={clientId}" +
                       $"&response_type=code" +
                       $"&platform_id=mp" +
                       $"&state={state}" +
-                      $"&redirect_uri={Uri.EscapeDataString(_redirectUri)}";
+                      $"&redirect_uri={Uri.EscapeDataString(redirectUri)}";
 
             return Task.FromResult(new OAuthUrlResponseDTO
             {
@@ -126,18 +137,23 @@ namespace Vinto.Api.Services.Implementaciones
             }
 
             // 4. POST a /oauth/token de MP
+            var clientId = RequireConfig(_clientId, "MercadoPago:ClientId");
+            var clientSecret = RequireConfig(_clientSecret, "MercadoPago:ClientSecret");
+            var redirectUri = RequireConfig(_redirectUri, "MercadoPago:RedirectUri");
+            var apiBaseUrl = RequireConfig(_apiBaseUrl, "MercadoPago:ApiBaseUrl");
+
             var httpClient = _httpClientFactory.CreateClient();
             var requestBody = new
             {
-                client_id = _clientId,
-                client_secret = _clientSecret,
+                client_id = clientId,
+                client_secret = clientSecret,
                 code = code,
                 grant_type = "authorization_code",
-                redirect_uri = _redirectUri
+                redirect_uri = redirectUri
             };
 
             var response = await httpClient.PostAsJsonAsync(
-                $"{_apiBaseUrl}/oauth/token",
+                $"{apiBaseUrl}/oauth/token",
                 requestBody);
 
             if (!response.IsSuccessStatusCode)
@@ -287,6 +303,8 @@ namespace Vinto.Api.Services.Implementaciones
             }
 
             // 9. Construir la preferencia completa
+            var frontendClientUrl = RequireConfig(_frontendClientUrl, "MercadoPago:FrontendClientUrl");
+
             var preferenceRequest = new PreferenceRequest
             {
                 Items = items,
@@ -303,9 +321,9 @@ namespace Vinto.Api.Services.Implementaciones
                 },
                 BackUrls = new PreferenceBackUrlsRequest
                 {
-                    Success = $"{_frontendClientUrl}/{slug}/pago/success?codigo={pedido.CodigoSeguimiento}",
-                    Failure = $"{_frontendClientUrl}/{slug}/pago/failure?codigo={pedido.CodigoSeguimiento}",
-                    Pending = $"{_frontendClientUrl}/{slug}/pago/pending?codigo={pedido.CodigoSeguimiento}"
+                    Success = $"{frontendClientUrl}/{slug}/pago/success?codigo={pedido.CodigoSeguimiento}",
+                    Failure = $"{frontendClientUrl}/{slug}/pago/failure?codigo={pedido.CodigoSeguimiento}",
+                    Pending = $"{frontendClientUrl}/{slug}/pago/pending?codigo={pedido.CodigoSeguimiento}"
                 },
                 PaymentMethods = new PreferencePaymentMethodsRequest
                 {
@@ -398,6 +416,10 @@ namespace Vinto.Api.Services.Implementaciones
             //
             // Vamos por C: solicitar un access_token de la app via client_credentials para hacer la consulta inicial.
 
+            var clientId = RequireConfig(_clientId, "MercadoPago:ClientId");
+            var clientSecret = RequireConfig(_clientSecret, "MercadoPago:ClientSecret");
+            var apiBaseUrl = RequireConfig(_apiBaseUrl, "MercadoPago:ApiBaseUrl");
+
             var httpClient = _httpClientFactory.CreateClient();
 
             // 2a) Obtener access_token de marketplace usando client_credentials
@@ -406,13 +428,13 @@ namespace Vinto.Api.Services.Implementaciones
             {
                 var clientCredsRequest = new
                 {
-                    client_id = _clientId,
-                    client_secret = _clientSecret,
+                    client_id = clientId,
+                    client_secret = clientSecret,
                     grant_type = "client_credentials"
                 };
 
                 var clientCredsResponse = await httpClient.PostAsJsonAsync(
-                    $"{_apiBaseUrl}/oauth/token",
+                    $"{apiBaseUrl}/oauth/token",
                     clientCredsRequest);
 
                 if (!clientCredsResponse.IsSuccessStatusCode)
@@ -437,7 +459,7 @@ namespace Vinto.Api.Services.Implementaciones
             }
 
             // 2b) Consultar el detalle del pago
-            var paymentRequest = new HttpRequestMessage(HttpMethod.Get, $"{_apiBaseUrl}/v1/payments/{paymentId}");
+            var paymentRequest = new HttpRequestMessage(HttpMethod.Get, $"{apiBaseUrl}/v1/payments/{paymentId}");
             paymentRequest.Headers.Add("Authorization", $"Bearer {appAccessToken}");
 
             var paymentResponse = await httpClient.SendAsync(paymentRequest);
