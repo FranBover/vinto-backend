@@ -1,6 +1,7 @@
 using Vinto.Api.Data;
 using Vinto.Api.DTOs;
 using Vinto.Api.Models;
+using Vinto.Api.Repositories.Interfaces;
 using Vinto.Api.Services.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -12,13 +13,15 @@ namespace Vinto.Api.Controllers
     public class PublicController : ControllerBase
     {
         private readonly AppDbContext _context;
+        private readonly IAdministradorRepository _administradorRepository;
         private readonly IDescuentoCalculatorService _calculatorService;
         private readonly IPedidoService _pedidoService;
         private readonly ILogger<PublicController> _logger;
 
-        public PublicController(AppDbContext context, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger)
+        public PublicController(AppDbContext context, IAdministradorRepository administradorRepository, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger)
         {
             _context = context;
+            _administradorRepository = administradorRepository;
             _calculatorService = calculatorService;
             _pedidoService = pedidoService;
             _logger = logger;
@@ -27,9 +30,7 @@ namespace Vinto.Api.Controllers
         [HttpGet("locales/{slug}/menu")]
         public async Task<IActionResult> GetMenu(string slug)
         {
-            var administrador = await _context.Administradores
-                .FirstOrDefaultAsync(a =>
-                    a.NombreLocal.ToLower().Replace(" ", "-") == slug);
+            var administrador = await _administradorRepository.ObtenerActivoPorSlugAsync(slug);
 
             if (administrador == null)
                 return NotFound();

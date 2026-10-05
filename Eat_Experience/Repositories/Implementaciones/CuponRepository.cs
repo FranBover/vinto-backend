@@ -53,16 +53,6 @@ namespace Vinto.Api.Repositories.Implementaciones
             return cupon;
         }
 
-        public async Task<Administrador?> ObtenerAdminActivoPorSlugAsync(string slugNormalizado)
-        {
-            var admins = await _context.Administradores
-                .AsNoTracking()
-                .Where(a => a.EsActivo)
-                .ToListAsync();
-
-            return admins.FirstOrDefault(a => Slugify(a.NombreLocal) == slugNormalizado);
-        }
-
         public async Task<CuponMetricasDTO> ObtenerMetricasAsync(int cuponId)
         {
             var cupon = await _context.Cupones.FindAsync(cuponId);
@@ -83,16 +73,6 @@ namespace Vinto.Api.Repositories.Implementaciones
                 PrimerUso = usos.Count > 0 ? usos.Min(u => u.FechaUso) : null,
                 UltimoUso = usos.Count > 0 ? usos.Max(u => u.FechaUso) : null
             };
-        }
-        private static string Slugify(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-
-            var normalized = value.Trim().ToLowerInvariant();
-            normalized = normalized.Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u").Replace("ñ", "n");
-            var parts = normalized.Split(new[] { ' ', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            return string.Join("-", parts);
         }
     }
 }

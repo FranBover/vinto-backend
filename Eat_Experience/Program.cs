@@ -312,6 +312,7 @@ if (app.Environment.IsDevelopment())
             {
                 Nombre = "Admin Prueba",
                 Email = "admin@ejemplo.com",
+                SlugLocal = "admin-prueba",
                 Telefono = "3511234567",
                 Direccion = "C�rdoba, Argentina"
             };

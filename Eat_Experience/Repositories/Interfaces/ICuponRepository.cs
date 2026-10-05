@@ -11,6 +11,5 @@ namespace Vinto.Api.Repositories.Interfaces
         Task<Cupon> CrearAsync(Cupon cupon);
         Task<Cupon> ActualizarAsync(Cupon cupon);
         Task<CuponMetricasDTO> ObtenerMetricasAsync(int cuponId);
-        Task<Administrador?> ObtenerAdminActivoPorSlugAsync(string slugNormalizado);
     }
 }

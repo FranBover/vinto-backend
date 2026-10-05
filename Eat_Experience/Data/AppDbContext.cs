@@ -125,6 +125,10 @@ namespace Vinto.Api.Data
                 .HasIndex(a => a.Email)
                 .IsUnique();
 
+            modelBuilder.Entity<Administrador>()
+                .HasIndex(a => a.SlugLocal)
+                .IsUnique();
+
             // (MT) Evitar duplicados por tenant
             modelBuilder.Entity<Categoria>()
                 .HasIndex(c => new { c.AdministradorId, c.Nombre })

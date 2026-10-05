@@ -3,6 +3,8 @@ namespace Vinto.Api.DTOs
     public class AdministradorLocalUpdateDTO
     {
         public string? NombreLocal { get; set; }
+        // Slug de la URL pública. Cambiarlo rompe los links ya compartidos del local.
+        public string? SlugLocal { get; set; }
         public string? Telefono { get; set; }
         public string? Direccion { get; set; }
         public string? LinkWhatsapp { get; set; }

@@ -218,9 +218,8 @@ namespace Vinto.Api.Services.Implementaciones
 
         public async Task<CrearPreferenciaResponseDTO> CrearPreferenciaPago(string slug, int pedidoId, string codigoSeguimiento)
         {
-            // 1. Buscar admin por slug (mismo patrón que PublicController)
-            var admin = await _context.Administradores
-                .FirstOrDefaultAsync(a => a.NombreLocal.ToLower().Replace(" ", "-") == slug);
+            // 1. Buscar admin activo por slug
+            var admin = await _administradorRepository.ObtenerActivoPorSlugAsync(slug);
 
             if (admin == null)
                 throw new ValidacionException("Local no encontrado.");

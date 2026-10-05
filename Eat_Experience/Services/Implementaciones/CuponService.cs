@@ -11,10 +11,12 @@ namespace Vinto.Api.Services.Implementaciones
     public class CuponService : ICuponService
     {
         private readonly ICuponRepository _cuponRepository;
+        private readonly IAdministradorRepository _administradorRepository;
 
-        public CuponService(ICuponRepository cuponRepository)
+        public CuponService(ICuponRepository cuponRepository, IAdministradorRepository administradorRepository)
         {
             _cuponRepository = cuponRepository;
+            _administradorRepository = administradorRepository;
         }
 
         public async Task<List<CuponResponseDTO>> GetAllAsync(int administradorId, bool? activo = null)
@@ -118,9 +120,7 @@ namespace Vinto.Api.Services.Implementaciones
 
         public async Task<ValidarCuponResponseDTO> ValidarCuponPublicoAsync(string slug, ValidarCuponRequestDTO request)
         {
-            var slugNorm = slug.Trim().ToLowerInvariant();
-
-            var admin = await _cuponRepository.ObtenerAdminActivoPorSlugAsync(slugNorm);
+            var admin = await _administradorRepository.ObtenerActivoPorSlugAsync(slug);
             if (admin == null)
                 throw new KeyNotFoundException("Local no encontrado.");
 

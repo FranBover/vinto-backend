@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Vinto.Api.Helpers;
 using Vinto.Api.Services.Interfaces;
 using Vinto.Api.Models;
 using Vinto.Api.DTOs;
@@ -45,6 +46,20 @@ namespace Vinto.Api.Controllers
             if (admin == null)
                 return NotFound();
 
+            // Primero lo único que puede fallar por validación, antes de tocar la entidad.
+            // El slug es independiente de NombreLocal: renombrar el local NO cambia la URL pública.
+            if (dto.SlugLocal != null)
+            {
+                try
+                {
+                    admin.SlugLocal = await _service.ValidarNuevoSlugAsync(id, dto.SlugLocal);
+                }
+                catch (ValidacionException ex)
+                {
+                    return BadRequest(new { mensaje = ex.Message });
+                }
+            }
+
             if (dto.NombreLocal != null) admin.NombreLocal = dto.NombreLocal;
             if (dto.Telefono != null) admin.Telefono = dto.Telefono;
             if (dto.Direccion != null) admin.Direccion = dto.Direccion;
@@ -72,6 +87,7 @@ namespace Vinto.Api.Controllers
                 Nombre = admin.Nombre,
                 Email = admin.Email,
                 NombreLocal = admin.NombreLocal,
+                SlugLocal = admin.SlugLocal,
                 Direccion = admin.Direccion,
                 Telefono = admin.Telefono,
                 LinkWhatsapp = admin.LinkWhatsapp,

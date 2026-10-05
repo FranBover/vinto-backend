@@ -9,6 +9,7 @@ namespace Vinto.Api.DTOs
         public string Nombre { get; set; } = string.Empty;
         public string Email { get; set; } = string.Empty;
         public string NombreLocal { get; set; } = string.Empty;
+        public string SlugLocal { get; set; } = string.Empty;
         public string Direccion { get; set; } = string.Empty;
         public string Telefono { get; set; } = string.Empty;
         public string? LinkWhatsapp { get; set; }

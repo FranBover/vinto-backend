@@ -15,6 +15,7 @@ namespace Vinto.Api.Services.Implementaciones
     {
         private readonly AppDbContext _context;
         private readonly IPedidoRepository _pedidoRepository;
+        private readonly IAdministradorRepository _administradorRepository;
         private readonly IHubContext<PedidosHub> _hubContext;
         private readonly IStockService _stockService;
         private readonly IDescuentoCalculatorService _calculatorService;
@@ -22,6 +23,7 @@ namespace Vinto.Api.Services.Implementaciones
 
         public PedidoService(
             IPedidoRepository pedidoRepository,
+            IAdministradorRepository administradorRepository,
             AppDbContext context,
             IHubContext<PedidosHub> hubContext,
             IStockService stockService,
@@ -29,6 +31,7 @@ namespace Vinto.Api.Services.Implementaciones
             ILogger<PedidoService> logger)
         {
             _pedidoRepository = pedidoRepository;
+            _administradorRepository = administradorRepository;
             _context = context;
             _hubContext = hubContext;
             _stockService = stockService;
@@ -164,15 +167,7 @@ namespace Vinto.Api.Services.Implementaciones
             if (string.IsNullOrWhiteSpace(request.FormaEntrega) || !formasEntregaValidas.Contains(request.FormaEntrega))
                 throw new InvalidOperationException($"Forma de entrega inválida: '{request.FormaEntrega}'. Valores permitidos: Delivery, Retira.");
 
-            var slugNormalized = slug.Trim().ToLowerInvariant();
-
-            // EF no puede traducir Slugify() a SQL, traemos admins activos y filtramos en memoria.
-            var adminsActivos = await _context.Administradores
-                .AsNoTracking()
-                .Where(a => a.EsActivo)
-                .ToListAsync();
-
-            var admin = adminsActivos.FirstOrDefault(a => Slugify(a.NombreLocal) == slugNormalized);
+            var admin = await _administradorRepository.ObtenerActivoPorSlugAsync(slug);
 
             if (admin == null)
                 throw new KeyNotFoundException("Local no encontrado.");
@@ -784,17 +779,6 @@ namespace Vinto.Api.Services.Implementaciones
             }
 
             return new List<string>();
-        }
-
-        private static string Slugify(string value)
-        {
-            if (string.IsNullOrWhiteSpace(value))
-                return string.Empty;
-
-            var normalized = value.Trim().ToLowerInvariant();
-            normalized = normalized.Replace("á", "a").Replace("é", "e").Replace("í", "i").Replace("ó", "o").Replace("ú", "u").Replace("ñ", "n");
-            var parts = normalized.Split(new[] { ' ', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            return string.Join("-", parts);
         }
 
         private static string GenerarCodigoSeguimiento()

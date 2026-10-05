@@ -20,6 +20,11 @@ namespace Vinto.Api.Models
         [Required, MaxLength(150)]
         public string NombreLocal { get; set; } = string.Empty;
 
+        // Identificador de la URL pública (/locales/{slug}). Persistido y único: renombrar
+        // NombreLocal NO lo modifica. Formato validado en SlugHelper.
+        [Required, MaxLength(60)]
+        public string SlugLocal { get; set; } = string.Empty;
+
         [Required, MaxLength(200)]
         public string Direccion { get; set; } = string.Empty;
 

@@ -2,6 +2,8 @@
 using Microsoft.AspNetCore.Mvc;
 using Vinto.Api.Data;
 using Vinto.Api.DTOs;
+using Vinto.Api.Helpers;
+using Vinto.Api.Repositories.Interfaces;
 using Vinto.Api.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -20,9 +22,11 @@ namespace Vinto.Api.Controllers
         private readonly AppDbContext _context;
         private readonly JwtSettings _jwtSettings;
         private readonly IConfiguration _configuration;
+        private readonly IAdministradorRepository _administradorRepository;
 
-        public AuthController(AppDbContext context, IOptions<JwtSettings> jwtSettings, IConfiguration configuration)
+        public AuthController(AppDbContext context, IOptions<JwtSettings> jwtSettings, IConfiguration configuration, IAdministradorRepository administradorRepository)
         {
+            _administradorRepository = administradorRepository;
             _context = context;
             _jwtSettings = jwtSettings.Value;
             _configuration = configuration;
@@ -42,12 +46,23 @@ namespace Vinto.Api.Controllers
             if (emailExiste)
                 return Conflict("Ya existe un administrador con ese email.");
 
+            var slugBase = SlugHelper.Slugify(dto.NombreLocal);
+            if (slugBase.Length == 0)
+                return BadRequest("El nombre del local debe contener al menos una letra o un número.");
+
+            // Reservados y duplicados se resuelven con sufijo numérico; el formato se verifica
+            // explícitamente aunque Slugify ya lo garantice por construcción.
+            var slugLocal = await _administradorRepository.GenerarSlugUnicoAsync(slugBase);
+            if (!SlugHelper.EsFormatoValido(slugLocal))
+                return BadRequest("No se pudo generar un slug válido a partir del nombre del local.");
+
             var passwordHasher = new PasswordHasher<Administrador>();
             var admin = new Administrador
             {
                 Nombre = dto.Nombre,
                 Email = dto.Email,
                 NombreLocal = dto.NombreLocal,
+                SlugLocal = slugLocal,
                 Telefono = dto.Telefono,
                 Direccion = dto.Direccion,
                 EsActivo = true,
@@ -64,7 +79,8 @@ namespace Vinto.Api.Controllers
                 id = admin.Id,
                 nombre = admin.Nombre,
                 email = admin.Email,
-                nombreLocal = admin.NombreLocal
+                nombreLocal = admin.NombreLocal,
+                slugLocal = admin.SlugLocal
             });
         }
 
