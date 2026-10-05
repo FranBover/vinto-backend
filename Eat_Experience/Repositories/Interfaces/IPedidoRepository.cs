@@ -1,11 +1,13 @@
-﻿using Vinto.Api.Models;
+﻿using Vinto.Api.DTOs;
+using Vinto.Api.Models;
 
 namespace Vinto.Api.Repositories.Interfaces
 {
     public interface IPedidoRepository
     {
-        Task<IEnumerable<Pedido>> ObtenerTodos();
-        Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega);
+        Task<(List<PedidoListItemResponseDTO> Items, int Total)> ObtenerFiltradosPaginado(
+            int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega,
+            int page, int pageSize);
         Task<Pedido?> ObtenerPorId(int id);
         Task Crear(Pedido pedido);
         Task Actualizar(Pedido pedido);

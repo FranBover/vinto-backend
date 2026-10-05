@@ -15,14 +15,6 @@ namespace Vinto.Api.Repositories.Implementaciones
             _context = context;
         }
 
-        public async Task<IEnumerable<Pedido>> ObtenerTodos()
-        {
-            return await _context.Pedidos
-                .Include(p => p.Detalles)
-                .ThenInclude(d => d.Producto)
-                .ToListAsync();
-        }
-
         public async Task<Pedido?> ObtenerPorId(int id)
         {
             return await _context.Pedidos
@@ -58,11 +50,13 @@ namespace Vinto.Api.Repositories.Implementaciones
             }
         }
 
-        public async Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega)
+        public async Task<(List<PedidoListItemResponseDTO> Items, int Total)> ObtenerFiltradosPaginado(
+            int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega,
+            int page, int pageSize)
         {
             var query = _context.Pedidos
-                .Where(p => p.AdministradorId == adminId)
-                .AsQueryable();
+                .AsNoTracking()
+                .Where(p => p.AdministradorId == adminId);
 
             if (!string.IsNullOrWhiteSpace(estado))
                 query = query.Where(p => p.Estado == estado);
@@ -79,9 +73,27 @@ namespace Vinto.Api.Repositories.Implementaciones
             if (!string.IsNullOrWhiteSpace(formaEntrega))
                 query = query.Where(p => p.FormaEntrega == formaEntrega);
 
-            return await query
-                .Include(p => p.Detalles)
+            var total = await query.CountAsync();
+
+            var items = await query
+                .OrderByDescending(p => p.Fecha)
+                .ThenByDescending(p => p.Id)
+                .Skip((page - 1) * pageSize)
+                .Take(pageSize)
+                .Select(p => new PedidoListItemResponseDTO
+                {
+                    Id = p.Id,
+                    Fecha = p.Fecha,
+                    Estado = p.Estado,
+                    NombreCliente = p.NombreCliente,
+                    FormaPago = p.FormaPago,
+                    FormaEntrega = p.FormaEntrega,
+                    Total = p.Total,
+                    ItemsCount = p.Detalles.Count
+                })
                 .ToListAsync();
+
+            return (items, total);
         }
 
         public async Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId)

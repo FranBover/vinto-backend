@@ -39,25 +39,16 @@ namespace Vinto.Api.Controllers
             [FromQuery] DateTime? desde,
             [FromQuery] DateTime? hasta,
             [FromQuery] string? formaPago,
-            [FromQuery] string? formaEntrega)
+            [FromQuery] string? formaEntrega,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 25)
         {
             var adminIdClaim = User.FindFirst("adminId")?.Value;
             if (string.IsNullOrWhiteSpace(adminIdClaim) || !int.TryParse(adminIdClaim, out var adminId))
                 return Unauthorized();
 
-            var pedidos = await _pedidoService.ObtenerFiltrados(adminId, estado, desde, hasta, formaPago, formaEntrega);
-
-            var resultado = pedidos.Select(p => new PedidoListItemResponseDTO
-            {
-                Id = p.Id,
-                Fecha = p.Fecha,
-                Estado = p.Estado,
-                NombreCliente = p.NombreCliente,
-                FormaPago = p.FormaPago,
-                FormaEntrega = p.FormaEntrega,
-                Total = p.Total,
-                ItemsCount = p.Detalles.Count()
-            }).ToList();
+            var resultado = await _pedidoService.ObtenerFiltradosPaginado(
+                adminId, estado, desde, hasta, formaPago, formaEntrega, page, pageSize);
 
             return Ok(resultado);
         }

@@ -5,7 +5,6 @@ namespace Vinto.Api.Services.Interfaces
 {
     public interface IPedidoService
     {
-        Task<IEnumerable<Pedido>> ObtenerTodos();
         Task<Pedido?> ObtenerPorId(int id);
         Task Crear(Pedido pedido);
         Task Actualizar(Pedido pedido);
@@ -17,7 +16,9 @@ namespace Vinto.Api.Services.Interfaces
         Task<string?> ObtenerResumenWhatsAppAdmin(int pedidoId, int adminId);
         Task<EstadoPagoPublicoResponseDTO> ObtenerEstadoPagoPublico(string codigoSeguimiento);
 
-        Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega);
+        Task<PagedResultDTO<PedidoListItemResponseDTO>> ObtenerFiltradosPaginado(
+            int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega,
+            int page, int pageSize);
         Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId);
         Task<ComentarioPedido?> AddComentarioAsync(int pedidoId, int adminId, string texto);
 

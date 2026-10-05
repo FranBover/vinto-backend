@@ -39,11 +39,6 @@ namespace Vinto.Api.Services.Implementaciones
             _logger = logger;
         }
 
-        public async Task<IEnumerable<Pedido>> ObtenerTodos()
-        {
-            return await _pedidoRepository.ObtenerTodos();
-        }
-
         public async Task<Pedido?> ObtenerPorId(int id)
         {
             return await _pedidoRepository.ObtenerPorId(id);
@@ -520,9 +515,26 @@ namespace Vinto.Api.Services.Implementaciones
             };
         }
 
-        public async Task<IEnumerable<Pedido>> ObtenerFiltrados(int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega)
+        public async Task<PagedResultDTO<PedidoListItemResponseDTO>> ObtenerFiltradosPaginado(
+            int adminId, string? estado, DateTime? desde, DateTime? hasta, string? formaPago, string? formaEntrega,
+            int page, int pageSize)
         {
-            return await _pedidoRepository.ObtenerFiltrados(adminId, estado, desde, hasta, formaPago, formaEntrega);
+            if (page < 1)
+                throw new ValidacionException("page debe ser mayor o igual a 1.", 400);
+            if (pageSize < 1 || pageSize > 100)
+                throw new ValidacionException("pageSize debe estar entre 1 y 100.", 400);
+
+            var (items, total) = await _pedidoRepository.ObtenerFiltradosPaginado(
+                adminId, estado, desde, hasta, formaPago, formaEntrega, page, pageSize);
+
+            return new PagedResultDTO<PedidoListItemResponseDTO>
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize,
+                TotalPages = (int)Math.Ceiling(total / (double)pageSize)
+            };
         }
 
         public async Task<IEnumerable<ComentarioPedido>?> GetComentariosAsync(int pedidoId, int adminId)
