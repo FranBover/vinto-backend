@@ -15,6 +15,7 @@ using System.Text.Json;
 using Vinto.Api.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.HttpOverrides;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -110,6 +111,22 @@ builder.Services.AddScoped<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 
 
+
+// ForwardedHeaders: detras del front end de Azure App Service, RemoteIpAddress seria la IP interna del
+// proxy. Leemos X-Forwarded-For / X-Forwarded-Proto para recuperar la IP real y el esquema original.
+// App Service (Linux) ya setea ASPNETCORE_FORWARDEDHEADERS_ENABLED=true, que registra su propio
+// middleware; esta Configure se registra despues y pisa sus opciones. KnownNetworks/KnownProxies se
+// limpian porque la IP del proxy de App Service es privada y cambia (por defecto solo se confia en loopback).
+// ForwardLimit = 1: se toma SOLO la entrada mas a la derecha del XFF (la que agrego el front end de
+// Azure); los valores que inyecte el cliente quedan a la izquierda y se ignoran.
+// Si se pone Front Door / CDN delante, subir ForwardLimit al numero de proxies de confianza.
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardLimit = 1;
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 builder.Services.AddMemoryCache();
 builder.Services.AddHttpClient();
@@ -211,6 +228,18 @@ builder.Services.AddCors(options =>
 
 
 var app = builder.Build();
+
+// ForwardedHeaders tiene que ir PRIMERO: antes del manejo de excepciones (para que los logs vean la IP real),
+// de UseHttpsRedirection (necesita X-Forwarded-Proto o entra en loop de redirects), de CORS y de auth.
+// Si el host ya lo registro (ASPNETCORE_FORWARDEDHEADERS_ENABLED=true) NO lo aplicamos de nuevo: una segunda
+// pasada consumiria la siguiente entrada del XFF, que es la que puede falsificar el cliente.
+var forwardedHeadersEnabledByHost =
+    string.Equals(app.Configuration["ASPNETCORE_FORWARDEDHEADERS_ENABLED"], "true", StringComparison.OrdinalIgnoreCase)
+    || string.Equals(app.Configuration["FORWARDEDHEADERS_ENABLED"], "true", StringComparison.OrdinalIgnoreCase);
+if (!forwardedHeadersEnabledByHost)
+{
+    app.UseForwardedHeaders();
+}
 
 // Middleware GLOBAL de manejo de excepciones.
 // Va lo m�s arriba posible del pipeline para envolver TODO lo dem�s en un try/catch
