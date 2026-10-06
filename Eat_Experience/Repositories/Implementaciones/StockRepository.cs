@@ -21,10 +21,10 @@ public class StockRepository : IStockRepository
             .FirstOrDefaultAsync(p => p.Id == productoId && p.AdministradorId == adminId);
     }
 
-    public async Task<VarianteProducto?> ObtenerVariante(int varianteId)
+    public async Task<VarianteProducto?> ObtenerVariante(int varianteId, int productoId)
     {
         return await _context.VariantesProducto
-            .FirstOrDefaultAsync(v => v.Id == varianteId);
+            .FirstOrDefaultAsync(v => v.Id == varianteId && v.ProductoId == productoId);
     }
 
     public Task RegistrarMovimiento(MovimientoStock movimiento)

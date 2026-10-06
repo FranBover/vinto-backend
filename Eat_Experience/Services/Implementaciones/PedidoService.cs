@@ -63,85 +63,6 @@ namespace Vinto.Api.Services.Implementaciones
 
 
         
-        public async Task<Pedido> CrearConDetalles(PedidoRequestDTO request)
-        {
-            if (request.Detalles == null || !request.Detalles.Any())
-                throw new Exception("El pedido debe tener al menos un producto.");
-
-            var pedido = new Pedido
-            {
-                AdministradorId = request.AdministradorId,
-                NombreCliente = request.NombreCliente,
-                TelefonoCliente = request.TelefonoCliente,
-                FormaPago = request.FormaPago,
-                FormaEntrega = request.FormaEntrega,
-                MontoPagoEfectivo = request.MontoPagoEfectivo,
-                DireccionCliente = request.DireccionCliente,
-                Fecha = DateTime.UtcNow,
-                Detalles = new List<DetallePedido>()
-            };
-
-            foreach (var detalleDTO in request.Detalles)
-            {
-                // Validamos existencia del producto
-                var producto = await _context.Productos.FindAsync(detalleDTO.ProductoId);
-                if (producto == null)
-                    throw new Exception($"Producto con ID {detalleDTO.ProductoId} no encontrado.");
-
-                var detalle = new DetallePedido
-                {
-                    ProductoId = detalleDTO.ProductoId,
-                    Cantidad = detalleDTO.Cantidad,
-                    PrecioUnitario = producto.Precio,
-                    ProductosExtra = new List<DetallePedidoExtra>()
-                };
-
-                // Procesar los extras seleccionados (ProductoExtra)
-                if (detalleDTO.ExtrasSeleccionados != null)
-                {
-                    foreach (var extraId in detalleDTO.ExtrasSeleccionados)
-                    {
-                        var extra = await _context.ProductoExtras.FindAsync(extraId);
-                        if (extra == null)
-                            continue; // Ignoramos extras inválidos
-
-                        if (detalleDTO.Cantidad <= 0)
-                            throw new Exception($"La cantidad del producto {detalleDTO.ProductoId} debe ser mayor a 0.");
-
-                        detalle.ProductosExtra.Add(new DetallePedidoExtra
-                        {
-                            ProductoExtraId = extraId
-                        });
-                    }
-                }
-
-                pedido.Detalles.Add(detalle);
-            }
-
-            // Calcular el total
-            decimal total = 0;
-            foreach (var d in pedido.Detalles)
-            {
-                decimal subtotal = d.PrecioUnitario * d.Cantidad;
-                foreach (var extra in d.ProductosExtra)
-                {
-                    var extraInfo = await _context.ProductoExtras.FindAsync(extra.ProductoExtraId);
-                    if (extraInfo != null)
-                    {
-                        subtotal += extraInfo.PrecioAdicional * d.Cantidad;
-                    }
-                }
-                total += subtotal;
-            }
-
-            pedido.Total = total;
-
-            _context.Pedidos.Add(pedido);
-            await _context.SaveChangesAsync();
-
-            return pedido;
-        }
-
         public async Task<PedidoCreateResponseDTO> CrearPublicoPorSlug(string slug, PedidoPublicCreateRequestDTO request)
         {
             if (request.Detalles == null || !request.Detalles.Any())
@@ -483,25 +404,10 @@ namespace Vinto.Api.Services.Implementaciones
             var pedido = await _context.Pedidos
                 .AsNoTracking()
                 .Include(p => p.Administrador)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.Producto)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.ProductosExtra)
-                        .ThenInclude(e => e.ProductoExtra)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.VarianteProducto)
-                        .ThenInclude(v => v!.Opcion1)
-                .Include(p => p.Detalles)
-                    .ThenInclude(d => d.VarianteProducto)
-                        .ThenInclude(v => v!.Opcion2)
                 .FirstOrDefaultAsync(p => p.CodigoSeguimiento == codigoSeguimiento);
 
             if (pedido == null)
                 return new EstadoPagoPublicoResponseDTO { Encontrado = false };
-
-            var nombreLocal = pedido.Administrador?.NombreLocal ?? "Local";
-            var numeroVisible = $"PED-{pedido.Id:D6}";
-            var resumen = GenerarResumenWhatsApp(pedido, nombreLocal, numeroVisible);
 
             return new EstadoPagoPublicoResponseDTO
             {
@@ -509,8 +415,6 @@ namespace Vinto.Api.Services.Implementaciones
                 Estado = pedido.Estado,
                 MercadoPagoStatus = pedido.MercadoPagoStatus,
                 Total = pedido.Total,
-                ResumenWhatsApp = resumen,
-                NombreCliente = pedido.NombreCliente,
                 LinkWhatsapp = pedido.Administrador?.LinkWhatsapp
             };
         }

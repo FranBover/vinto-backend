@@ -5,7 +5,7 @@ namespace Vinto.Api.Repositories.Interfaces;
 public interface IStockRepository
 {
     Task<Producto?> ObtenerProductoConAdmin(int productoId, int adminId);
-    Task<VarianteProducto?> ObtenerVariante(int varianteId);
+    Task<VarianteProducto?> ObtenerVariante(int varianteId, int productoId);
     Task RegistrarMovimiento(MovimientoStock movimiento);
     Task SaveChanges();
 

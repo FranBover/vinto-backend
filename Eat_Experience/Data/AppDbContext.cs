@@ -141,6 +141,9 @@ namespace Vinto.Api.Data
             modelBuilder.Entity<Pedido>()
                 .HasIndex(p => new { p.AdministradorId, p.Fecha });
 
+            modelBuilder.Entity<Pedido>()
+                .HasIndex(p => p.CodigoSeguimiento);
+
             // Evita repetir el mismo extra dos veces en el mismo ítem
             modelBuilder.Entity<DetallePedidoExtra>()
                 .HasIndex(x => new { x.DetallePedidoId, x.ProductoExtraId })

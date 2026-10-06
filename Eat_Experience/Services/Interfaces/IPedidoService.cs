@@ -11,7 +11,6 @@ namespace Vinto.Api.Services.Interfaces
         Task Eliminar(int id);
 
 
-        Task<Pedido> CrearConDetalles(PedidoRequestDTO request);
         Task<PedidoCreateResponseDTO> CrearPublicoPorSlug(string slug, PedidoPublicCreateRequestDTO request);
         Task<string?> ObtenerResumenWhatsAppAdmin(int pedidoId, int adminId);
         Task<EstadoPagoPublicoResponseDTO> ObtenerEstadoPagoPublico(string codigoSeguimiento);

@@ -29,6 +29,12 @@ namespace Vinto.Api.Controllers
             return claim != null && int.TryParse(claim, out adminId);
         }
 
+        private async Task<bool> CategoriaEsDelTenant(int categoriaId, int adminId)
+        {
+            return await _context.Categorias
+                .AnyAsync(c => c.Id == categoriaId && c.AdministradorId == adminId);
+        }
+
         [HttpGet]
         public async Task<IActionResult> GetProductos()
         {
@@ -77,6 +83,9 @@ namespace Vinto.Api.Controllers
             if (!TryGetAdminId(out int adminId))
                 return Forbid();
 
+            if (!await CategoriaEsDelTenant(dto.CategoriaId, adminId))
+                return BadRequest(new { mensaje = "La categoría indicada no existe o no pertenece a tu negocio." });
+
             var producto = new Producto
             {
                 Nombre = dto.Nombre,
@@ -104,6 +113,9 @@ namespace Vinto.Api.Controllers
             var producto = await _productoService.ObtenerPorId(id);
             if (producto == null) return NotFound();
             if (producto.AdministradorId != adminId) return Forbid();
+
+            if (!await CategoriaEsDelTenant(dto.CategoriaId, adminId))
+                return BadRequest(new { mensaje = "La categoría indicada no existe o no pertenece a tu negocio." });
 
             producto.Nombre = dto.Nombre;
             producto.Descripcion = dto.Descripcion;

@@ -1,3 +1,4 @@
+using Vinto.Api.Helpers;
 using Vinto.Api.Models;
 using Vinto.Api.Repositories.Interfaces;
 using Vinto.Api.Services.Interfaces;
@@ -20,7 +21,7 @@ public class StockService : IStockService
 
         if (varianteId.HasValue)
         {
-            var variante = await _stockRepository.ObtenerVariante(varianteId.Value)
+            var variante = await _stockRepository.ObtenerVariante(varianteId.Value, productoId)
                 ?? throw new InvalidOperationException("Variante no encontrada.");
 
             if (variante.Stock == null) return;
@@ -77,12 +78,12 @@ public class StockService : IStockService
     public async Task ReponerStock(int productoId, int? varianteId, int cantidad, string motivo, int adminId)
     {
         var producto = await _stockRepository.ObtenerProductoConAdmin(productoId, adminId)
-            ?? throw new InvalidOperationException("Producto no encontrado.");
+            ?? throw new ValidacionException("Producto no encontrado.", 404);
 
         if (varianteId.HasValue)
         {
-            var variante = await _stockRepository.ObtenerVariante(varianteId.Value)
-                ?? throw new InvalidOperationException("Variante no encontrada.");
+            var variante = await _stockRepository.ObtenerVariante(varianteId.Value, productoId)
+                ?? throw new ValidacionException("Variante no encontrada.", 404);
 
             if (variante.Stock == null) return;
 
@@ -124,12 +125,12 @@ public class StockService : IStockService
     public async Task AjustarStock(int productoId, int? varianteId, int nuevoStock, string motivo, int adminId)
     {
         var producto = await _stockRepository.ObtenerProductoConAdmin(productoId, adminId)
-            ?? throw new InvalidOperationException("Producto no encontrado.");
+            ?? throw new ValidacionException("Producto no encontrado.", 404);
 
         if (varianteId.HasValue)
         {
-            var variante = await _stockRepository.ObtenerVariante(varianteId.Value)
-                ?? throw new InvalidOperationException("Variante no encontrada.");
+            var variante = await _stockRepository.ObtenerVariante(varianteId.Value, productoId)
+                ?? throw new ValidacionException("Variante no encontrada.", 404);
 
             if (variante.Stock == null) return;
 
