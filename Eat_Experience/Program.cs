@@ -16,6 +16,8 @@ using Vinto.Api.Models;
 using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
+using Microsoft.AspNetCore.RateLimiting;
+using System.Threading.RateLimiting;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -227,6 +229,51 @@ builder.Services.AddCors(options =>
 
 
 
+// RATE LIMITING (Microsoft.AspNetCore.RateLimiting, incluido en el framework).
+// ATENCION: el estado de los contadores vive en MEMORIA de cada instancia. Si se escala
+// horizontalmente (N instancias del App Service) el limite efectivo es N veces mayor y no se
+// comparte entre instancias; habria que moverlo a un store distribuido (ej. Redis).
+// No hay limite global: solo se limitan los endpoints con [EnableRateLimiting("nombre")].
+// Particionado por IP real del cliente (requiere UseForwardedHeaders antes de UseRateLimiter).
+static RateLimitPartition<string> PorIp(HttpContext ctx, int permitLimit, TimeSpan window) =>
+    RateLimitPartition.GetSlidingWindowLimiter(
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "sin-ip",
+        _ => new SlidingWindowRateLimiterOptions
+        {
+            PermitLimit = permitLimit,
+            Window = window,
+            SegmentsPerWindow = 5,
+            QueueLimit = 0,
+            AutoReplenishment = true
+        });
+
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+
+    options.AddPolicy("login", ctx => PorIp(ctx, 5, TimeSpan.FromMinutes(5)));
+    options.AddPolicy("register", ctx => PorIp(ctx, 3, TimeSpan.FromMinutes(15)));
+    options.AddPolicy("pedidoPublico", ctx => PorIp(ctx, 10, TimeSpan.FromMinutes(10)));
+    options.AddPolicy("consultaPublica", ctx => PorIp(ctx, 30, TimeSpan.FromMinutes(1)));
+
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        var http = context.HttpContext;
+        var policy = http.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName;
+        http.RequestServices.GetRequiredService<ILoggerFactory>()
+            .CreateLogger("RateLimiter")
+            .LogWarning("Rate limit excedido: politica {Policy}, IP {Ip}, {Method} {Path}",
+                policy, http.Connection.RemoteIpAddress, http.Request.Method, http.Request.Path);
+
+        // Mensaje generico a proposito: sin Retry-After ni intentos restantes.
+        http.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        http.Response.ContentType = "application/json; charset=utf-8";
+        await http.Response.WriteAsync(
+            JsonSerializer.Serialize(new { error = "Demasiados intentos, probá de nuevo en unos minutos" }),
+            cancellationToken);
+    };
+});
+
 var app = builder.Build();
 
 // ForwardedHeaders tiene que ir PRIMERO: antes del manejo de excepciones (para que los logs vean la IP real),
@@ -316,6 +363,10 @@ app.UseStaticFiles(new StaticFileOptions
 
 
 app.UseCors("AllowFrontend");
+
+// Despues de UseForwardedHeaders (IP real) y de UseCors (el 429 lleva headers CORS);
+// antes de auth y de MapControllers.
+app.UseRateLimiter();
 
 app.UseAuthentication();
 

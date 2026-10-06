@@ -33,6 +33,7 @@ namespace Vinto.Api.Controllers
         }
 
         [AllowAnonymous]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("register")]
         [HttpPost("register")]
         public async Task<IActionResult> Register([FromBody] RegisterAdminDTO dto)
         {
@@ -84,6 +85,7 @@ namespace Vinto.Api.Controllers
             });
         }
 
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("login")]
         [HttpPost("login")]
         public IActionResult Login([FromBody] LoginRequestDTO login)
         {

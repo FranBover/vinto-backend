@@ -155,6 +155,7 @@ namespace Vinto.Api.Controllers
             return Ok(response);
         }
 
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("consultaPublica")]
         [HttpGet("pedidos/{codigoSeguimiento}/estado-pago")]
         public async Task<IActionResult> ObtenerEstadoPagoPublico(string codigoSeguimiento)
         {

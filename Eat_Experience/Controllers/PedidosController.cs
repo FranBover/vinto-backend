@@ -161,6 +161,7 @@ namespace Vinto.Api.Controllers
             return Ok(new { advertencias });
         }
 
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("pedidoPublico")]
         [HttpPost("/api/public/locales/{slug}/pedidos")]
         public async Task<IActionResult> CrearPedidoPublico(string slug, [FromBody] PedidoPublicCreateRequestDTO request)
         {

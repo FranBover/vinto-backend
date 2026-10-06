@@ -99,6 +99,7 @@ namespace Vinto.Api.Controllers
         }
 
         [AllowAnonymous]
+        [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("consultaPublica")]
         [HttpPost("/api/public/locales/{slug}/cupones/validar")]
         public async Task<IActionResult> ValidarCuponPublico(string slug, [FromBody] ValidarCuponRequestDTO request)
         {
