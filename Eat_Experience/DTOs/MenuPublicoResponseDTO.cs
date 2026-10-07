@@ -98,6 +98,14 @@ namespace Vinto.Api.DTOs
         public string ZonaEnvio { get; set; } = "Nacional";
         public decimal? CostoEnvio { get; set; }
         public bool MercadoPagoHabilitado { get; set; }
+
+        // Copia para responder sin mutar la instancia que vive en la caché del menú.
+        public LocalInfoDTO ConLogoImagenUrl(string? logoImagenUrl)
+        {
+            var copia = (LocalInfoDTO)MemberwiseClone();
+            copia.LogoImagenUrl = logoImagenUrl;
+            return copia;
+        }
     }
 
     public class MenuPublicoResponseDTO

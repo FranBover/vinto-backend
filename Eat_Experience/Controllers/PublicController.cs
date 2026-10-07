@@ -1,4 +1,5 @@
 using Vinto.Api.Data;
+using Vinto.Api.Helpers;
 using Vinto.Api.DTOs;
 using Vinto.Api.Models;
 using Vinto.Api.Repositories.Interfaces;
@@ -17,9 +18,11 @@ namespace Vinto.Api.Controllers
         private readonly IDescuentoCalculatorService _calculatorService;
         private readonly IPedidoService _pedidoService;
         private readonly ILogger<PublicController> _logger;
+        private readonly IMenuPublicoCache _menuCache;
 
-        public PublicController(AppDbContext context, IAdministradorRepository administradorRepository, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger)
+        public PublicController(AppDbContext context, IAdministradorRepository administradorRepository, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger, IMenuPublicoCache menuCache)
         {
+            _menuCache = menuCache;
             _context = context;
             _administradorRepository = administradorRepository;
             _calculatorService = calculatorService;
@@ -30,10 +33,28 @@ namespace Vinto.Api.Controllers
         [HttpGet("locales/{slug}/menu")]
         public async Task<IActionResult> GetMenu(string slug)
         {
+            // Mismo normalizado que usa el repositorio para resolver el local. Un slug inválido
+            // ("" tras normalizar) nunca llega a la caché.
+            var slugNormalizado = SlugHelper.Normalizar(slug);
+            var baseUrl = $"{Request.Scheme}://{Request.Host}";
+
+            if (slugNormalizado.Length > 0 && _menuCache.TryGet(slugNormalizado, out var cacheado) && cacheado != null)
+            {
+                Response.Headers["X-Cache"] = "HIT";
+                return Ok(ArmarRespuesta(cacheado, baseUrl));
+            }
+
+            Response.Headers["X-Cache"] = "MISS";
+
             var administrador = await _administradorRepository.ObtenerActivoPorSlugAsync(slug);
 
+            // Inexistente o desactivado: 404 y nada se cachea.
             if (administrador == null)
                 return NotFound();
+
+            // Capturar ANTES de leer: si el local se invalida mientras se arma el menú,
+            // la entrada nace expirada y no queda dato viejo.
+            var tokenInvalidacion = _menuCache.ObtenerToken(administrador.Id);
 
             var categorias = await _context.Categorias
                 .Where(c => c.AdministradorId == administrador.Id)
@@ -99,9 +120,6 @@ namespace Vinto.Api.Controllers
                 .GroupBy(d => d.CategoriaId!.Value)
                 .ToDictionary(g => g.Key, g => g.ToList());
 
-            var baseUrl = $"{Request.Scheme}://{Request.Host}";
-            var logoImagenUrl = logoImagen != null ? baseUrl + logoImagen.Url : null;
-
             var response = new MenuPublicoResponseDTO
             {
                 Local = new LocalInfoDTO
@@ -110,7 +128,6 @@ namespace Vinto.Api.Controllers
                     Telefono = administrador.Telefono,
                     LinkWhatsapp = administrador.LinkWhatsapp,
                     LogoUrl = administrador.LogoUrl,
-                    LogoImagenUrl = logoImagenUrl,
                     Direccion = administrador.Direccion,
                     EsActivo = administrador.EsActivo,
                     AliasTransferencia = administrador.AliasTransferencia,
@@ -152,7 +169,22 @@ namespace Vinto.Api.Controllers
                 }).ToList()
             };
 
-            return Ok(response);
+            var entrada = new MenuPublicoCacheado(response, logoImagen?.Url);
+            _menuCache.Set(slugNormalizado, entrada, tokenInvalidacion);
+
+            return Ok(ArmarRespuesta(entrada, baseUrl));
+        }
+
+        // La URL absoluta del logo depende del Host del request: no se cachea, se arma acá.
+        private static MenuPublicoResponseDTO ArmarRespuesta(MenuPublicoCacheado entrada, string baseUrl)
+        {
+            var menu = entrada.Menu;
+            return new MenuPublicoResponseDTO
+            {
+                Local = menu.Local.ConLogoImagenUrl(entrada.LogoImagenPath != null ? baseUrl + entrada.LogoImagenPath : null),
+                Categorias = menu.Categorias,
+                DescuentosPedidoCompleto = menu.DescuentosPedidoCompleto
+            };
         }
 
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("consultaPublica")]

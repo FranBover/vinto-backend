@@ -71,11 +71,13 @@ builder.Services.AddSingleton(sp =>
     sp.GetRequiredService<IOptions<JwtSettings>>().Value);
 
 // conexi�n a sqlserver
-builder.Services.AddDbContext<AppDbContext>(options =>
+builder.Services.AddSingleton<IMenuPublicoCache, MenuPublicoCache>();
+builder.Services.AddScoped<MenuCacheInvalidationInterceptor>();
+builder.Services.AddDbContext<AppDbContext>((sp, options) =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
         sql => sql.CommandTimeout(180) // 3 minutos
-    ));
+    ).AddInterceptors(sp.GetRequiredService<MenuCacheInvalidationInterceptor>()));
 
 // Repositorios
 

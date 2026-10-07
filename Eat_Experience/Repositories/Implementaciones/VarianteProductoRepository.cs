@@ -2,16 +2,19 @@ using Microsoft.EntityFrameworkCore;
 using Vinto.Api.Data;
 using Vinto.Api.Models;
 using Vinto.Api.Repositories.Interfaces;
+using Vinto.Api.Services.Interfaces;
 
 namespace Vinto.Api.Repositories.Implementaciones
 {
     public class VarianteProductoRepository : IVarianteProductoRepository
     {
         private readonly AppDbContext _context;
+        private readonly IMenuPublicoCache _menuCache;
 
-        public VarianteProductoRepository(AppDbContext context)
+        public VarianteProductoRepository(AppDbContext context, IMenuPublicoCache menuCache)
         {
             _context = context;
+            _menuCache = menuCache;
         }
 
         public async Task<IEnumerable<VarianteProducto>> ObtenerPorProductoId(int productoId)
@@ -57,6 +60,15 @@ namespace Vinto.Api.Repositories.Implementaciones
             await _context.VariantesProducto
                 .Where(v => v.ProductoId == productoId)
                 .ExecuteDeleteAsync();
+
+            // ExecuteDelete no pasa por SaveChanges, así que el interceptor de la caché del menú no lo ve.
+            var adminId = await _context.Productos
+                .AsNoTracking()
+                .Where(p => p.Id == productoId)
+                .Select(p => (int?)p.AdministradorId)
+                .FirstOrDefaultAsync();
+            if (adminId.HasValue)
+                _menuCache.Invalidar(adminId.Value);
         }
     }
 }
