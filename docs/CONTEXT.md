@@ -4,7 +4,7 @@
 > Donde algo no pudo confirmarse con certeza se marca **(verificar)**.
 > **No** se incluyen valores de secretos: solo se referencian por nombre de configuración.
 
-Última actualización: 2026-08-20 · Verificado contra el commit `cc8ed06`.
+Última actualización: 2026-10-07 · Verificado contra el commit `2d837bc` (`main`, árbol limpio).
 
 ---
 
@@ -16,7 +16,7 @@ Nació para un local de comida que tomaba todos los pedidos por teléfono. El do
 
 Características que se desprenden del código:
 
-- **Tienda pública por negocio**, accesible por *slug* derivado del nombre (`GET /api/public/locales/{slug}/menu`). Sin login del comprador.
+- **Tienda pública por negocio**, accesible por *slug* persistido (`Administrador.SlugLocal`, ver §6.8) en `GET /api/public/locales/{slug}/menu`. Sin login del comprador. El menú se cachea 60 s (§6.10).
 - **Pedidos sin registro**: el comprador arma el pedido contra el endpoint público. Se genera un código de seguimiento.
 - **Resumen para WhatsApp**: al crear el pedido el backend devuelve `ResumenWhatsApp`, texto formateado en es-AR listo para enviar. Regenerable desde el panel.
 - **Panel privado**: catálogo, variantes, stock, descuentos, cupones, pedidos, imágenes, datos del negocio, reportes y conexión con Mercado Pago. Protegido por JWT.
@@ -24,7 +24,7 @@ Características que se desprenden del código:
 - **Tiempo real** con SignalR (`/hubs/pedidos`): notifica nuevos pedidos y pagos confirmados al panel.
 
 **Multi-tenant:**
-- En lo **público**, el tenant se resuelve por **slug** (derivado de `Administrador.NombreLocal`).
+- En lo **público**, el tenant se resuelve por **slug** (`Administrador.SlugLocal`, columna única, independiente de `NombreLocal`) vía `IAdministradorRepository.ObtenerActivoPorSlugAsync`. Un local con `EsActivo = false` no resuelve.
 - En lo **privado**, por **`adminId`** (claim del JWT). Cada entidad de negocio cuelga de `AdministradorId`.
 
 ---
@@ -53,11 +53,11 @@ Services/      → Lógica de negocio (Interfaces/ + Implementaciones/)
 Repositories/  → Acceso a datos sobre AppDbContext (Interfaces/ + Implementaciones/)
 DTOs/          → Contratos de request/response
 Models/        → Entidades EF
-Data/          → AppDbContext: relaciones, índices, precisión, defaults
-Helpers/       → EncryptionHelper (AES-GCM), MercadoPagoSignatureValidator, ValidacionException
+Data/          → AppDbContext (relaciones, índices, precisión, defaults) + MenuCacheInvalidationInterceptor
+Helpers/       → EncryptionHelper (AES-GCM), MercadoPagoSignatureValidator, SlugHelper, ValidacionException
 Storage/       → IStorageProvider + LocalStorageProvider + AzureBlobStorageProvider
 Hubs/          → PedidosHub (SignalR)
-Migrations/    → 22 migraciones EF
+Migrations/    → 24 migraciones EF
 ```
 
 > **Nota sobre la capa de repos:** su uso es parcial y deliberado. Varios controllers y services usan `AppDbContext` directamente cuando la consulta necesita múltiples `Include` (`PublicController.GetMenu` es el caso extremo, con cinco niveles de `ThenInclude`). Conviven ambos estilos; no hay convención única.
@@ -65,25 +65,31 @@ Migrations/    → 22 migraciones EF
 **Multi-tenant en la práctica:**
 
 - Los filtros globales (`HasQueryFilter`) están **preparados pero comentados** en `AppDbContext` (líneas ~263-267), porque activarlos requiere inyectar un `ITenantProvider` en el constructor del contexto. El aislamiento se hace **manualmente** filtrando por `AdministradorId` en cada consulta. **Riesgo:** una consulta que olvide el filtro es una fuga entre tenants.
-- Patrón en controllers privados: `TryGetAdminId(out int adminId)` lee el claim `adminId`; luego cada operación valida pertenencia de la entidad y devuelve `Forbid()` si no corresponde.
-- La unicidad es por tenant: índices compuestos `(AdministradorId, Nombre)` en `Categoria` y `Producto`, `(AdministradorId, Codigo)` en `Cupon`.
+- Patrón en controllers privados: el claim `adminId` se lee en cada controller. Los de catálogo/promociones/imágenes/reportes tienen un `TryGetAdminId(out int)` **privado propio** (no hay uno compartido); `PedidosController`, `StockController` y `AdministradorController` lo leen inline (`ObtenerAdminId()` en Stock). Si falta el claim, Pedidos y Stock devuelven `Unauthorized()`; Administrador devuelve `Forbid()`. Luego cada operación valida pertenencia de la entidad.
+- La unicidad es por tenant: índices compuestos `(AdministradorId, Nombre)` en `Categoria` y `Producto`, `(AdministradorId, Codigo)` en `Cupon`. El slug es único **global** (§6.8).
 
-**Pipeline (`Program.cs`), en orden de registro:**
+**Registro de servicios (`Program.cs`), en orden:**
 
-JWT (con handler de `access_token` por query string para `/hubs`) → DbContext SQL Server (command timeout 180s) → 13 repositorios → 17 servicios → MemoryCache → HttpClient → `EncryptionHelper` (singleton) → `MercadoPagoSignatureValidator` (singleton) → `IStorageProvider` condicional → `ImagenService` → SignalR → Controllers + Swagger → CORS `AllowFrontend`.
+JWT (con handler de `access_token` por query string para `/hubs`) → `IMenuPublicoCache` (singleton) + `MenuCacheInvalidationInterceptor` (scoped) → DbContext SQL Server (command timeout 180s, con el interceptor) → 13 repositorios → 15 servicios de dominio → `Configure<ForwardedHeadersOptions>` → MemoryCache → HttpClient → `EncryptionHelper` y `MercadoPagoSignatureValidator` (singletons) → `IStorageProvider` condicional → `ImagenService` → SignalR → Controllers + Swagger → CORS `AllowFrontend` → `AddRateLimiter`.
 
-Orden del middleware en la request:
+> `IDetallePedidoRepository` está registrado dos veces (inofensivo) e `IDetallePedidoService` no está registrado (nadie lo inyecta).
 
-1. **Middleware global de excepciones** (inline, lo más arriba posible)
-2. Swagger (solo Development)
-3. `UseHttpsRedirection`
-4. `UseStaticFiles` + static files de `/uploads` desde `ContentRootPath/uploads`
-5. `UseCors("AllowFrontend")`
-6. `UseAuthentication` → `UseAuthorization`
-7. `MapHub<PedidosHub>("/hubs/pedidos")` + `MapControllers`
-8. Seed de admin, **condicionado a `IsDevelopment()`**
+**Orden del middleware en la request:**
+
+1. `UseForwardedHeaders` — **condicional**: solo si el host no lo registró ya (§6.9)
+2. **Middleware global de excepciones** (inline)
+3. Swagger (solo Development)
+4. `UseHttpsRedirection`
+5. `UseStaticFiles` + static files de `/uploads` desde `ContentRootPath/uploads`
+6. `UseCors("AllowFrontend")`
+7. `UseRateLimiter` — después de CORS (el 429 lleva headers CORS) y de ForwardedHeaders (IP real)
+8. `UseAuthentication` → `UseAuthorization`
+9. `MapHub<PedidosHub>("/hubs/pedidos")` + `MapControllers`
+10. Seed de admin, **condicionado a `IsDevelopment()`**
 
 **Detalle del middleware de excepciones:** está por encima de `UseCors` a propósito y **no** llama a `Response.Clear()`, para no borrar los headers CORS que ya se aplicaron aguas abajo. Sin eso, un 500 llegaba al navegador sin headers CORS y se reportaba como error de CORS, enmascarando la causa real. El cuerpo está gateado: en producción solo `{ error: "Error interno del servidor" }`; fuera de producción incluye `error`, `detalle` y `tipo`. La excepción completa siempre se loguea con `LogError`.
+
+> **Este middleware NO traduce `ValidacionException`.** Trata toda excepción como 500. La traducción a 400/404 la hace cada controller con su propio `catch (ValidacionException)` (Cupones, Descuentos, MercadoPago parcialmente, Pedidos público, Administrador.PatchLocal). Donde el controller no la atrapa, el cliente recibe 500. Casos hoy sin catch: `GET /api/Pedidos` con `page`/`pageSize` inválidos, y `GET estado` y `POST desconectar` de MercadoPago cuando el administrador no existe. Además `ValidacionException.StatusCode` casi siempre se ignora: los catch devuelven 400 (solo `DescuentosController` distingue el 404).
 
 **CORS `AllowFrontend`** — orígenes permitidos:
 - `http://localhost:5173`
@@ -111,7 +117,7 @@ Firma HMAC-SHA256 con `JwtSettings:Key`. Expiración según `JwtSettings:Expirat
 
 **Validación** (`Program.cs`): valida issuer, audience, lifetime y firma. Todo activado.
 
-**Registro** (`POST /api/Auth/register`): `[AllowAnonymous]`, protegido por el header `X-Admin-Key` comparado contra `AdminRegistroKey`. Verifica que el email sea único.
+**Registro** (`POST /api/Auth/register`): `[AllowAnonymous]`, protegido por el header `X-Admin-Key` comparado contra `AdminRegistroKey`. Verifica que el email sea único y genera el `SlugLocal` (§6.8). Login y registro tienen rate limit por IP (§6.10).
 
 **Autorización por tenant:** no hay roles. El único eje es la pertenencia al tenant. Cada endpoint privado extrae `adminId` del token y valida que el recurso le pertenezca.
 
@@ -127,7 +133,7 @@ Entidades reales de `Models/` y `AppDbContext`. `*` = nullable.
 
 Tabla central.
 - `Id`, `Nombre`, `Email` (**índice único**), `PasswordHash`
-- Negocio: `NombreLocal`, `Direccion`, `Telefono`, `LinkWhatsapp*`, `LogoUrl*`, `Horarios*`, `UbicacionUrl*`
+- Negocio: `NombreLocal`, `SlugLocal` (`nvarchar(60)` NOT NULL, **índice único** `IX_Administradores_SlugLocal`; no cambia al renombrar `NombreLocal`), `Direccion`, `Telefono`, `LinkWhatsapp*`, `LogoUrl*`, `Horarios*`, `UbicacionUrl*`
 - `EsActivo`, `FechaRegistro` (default `GETUTCDATE()`), `UltimoAcceso*`, `PlanSuscripcion*`, `DominioPersonalizado*`
 - Transferencia: `AliasTransferencia*`, `TitularCuenta*`
 - Envío: `ZonaEnvio` (`"Ciudad"` | `"Nacional"`, default `"Nacional"`), `CostoEnvio*`
@@ -163,7 +169,8 @@ Relaciones 1:N, todas `Restrict` salvo `Imagen` (Cascade): Categoria, Producto, 
 - Totales: `Total` (18,2), `SubtotalSinDescuentos`, `MontoDescuentoProductos`, `MontoDescuentoCupon` (todos default 0)
 - Cupón: `CuponId*` (Restrict), `CodigoCupon*`
 - Mercado Pago: `MercadoPagoPreferenceId*`, `MercadoPagoPaymentId*`, `MercadoPagoStatus*`, `MercadoPagoStatusDetail*`, `MercadoPagoFechaPago*`, `MercadoPagoCollectionId*`
-- Colección `Detalles` (Cascade). Índice `(AdministradorId, Fecha)`
+- Colección `Detalles` (Cascade). Índices `(AdministradorId, Fecha)` (sostiene el listado paginado) y `CodigoSeguimiento` (para `estado-pago`; no es único)
+- `FormaEntrega` solo se crea como `Delivery` o `Retira` desde el endpoint público (whitelist, §6.11)
 
 Estados validados en `PedidosController.PatchEstado`: `Pendiente`, `Confirmado`, `EnPreparacion`, `Listo`, `Entregado`, `Cancelado`.
 
@@ -213,20 +220,22 @@ Rutas reales tomadas de los controllers. `[controller]` resuelve al nombre sin s
 
 ### Públicos (sin JWT)
 
-| Método | Ruta | Qué hace |
-|---|---|---|
-| POST | `/api/Auth/register` | Registra un negocio. Requiere header `X-Admin-Key`. |
-| POST | `/api/Auth/login` | Login, devuelve `{ token }`. |
-| GET | `/api/public/locales/{slug}/menu` | Catálogo público: datos del negocio, categorías con productos disponibles, variantes, extras, imágenes y descuentos a pedido completo. |
-| GET | `/api/public/pedidos/{codigoSeguimiento}/estado-pago` | Estado del pedido y del pago, más el resumen. |
-| POST | `/api/public/locales/{slug}/pedidos` | Crea pedido. Devuelve `PedidoCreateResponseDTO` con `ResumenWhatsApp` y `CodigoSeguimiento`. Definido en `PedidosController` con ruta absoluta. |
-| POST | `/api/public/locales/{slug}/pedidos/{pedidoId}/preferencia-mp` | Crea la preferencia de pago. Body: `{ codigoSeguimiento }`. |
-| POST | `/api/public/locales/{slug}/cupones/validar` | Valida cupón contra un subtotal. `[AllowAnonymous]` en `CuponesController`. |
-| GET | `/api/MercadoPago/oauth/callback` | Callback OAuth. `[AllowAnonymous]`; la seguridad la da el `state`. Redirige al front admin. |
-| POST | `/api/MercadoPago/webhook` | Webhook de pagos. `[AllowAnonymous]`; la seguridad la da la firma HMAC. Responde 200 salvo error grave. |
-| POST | `/api/MercadoPago/dev/simular-webhook-aprobado` | **Solo Development**: simula un pago aprobado. |
+La columna *Rate limit* es la política de §6.9; "—" = sin límite.
 
-> Los endpoints públicos de pedidos y cupones viven en controllers con `[Authorize]` a nivel de clase, pero se declaran con ruta absoluta y, en el caso de cupones, con `[AllowAnonymous]` explícito. En `PedidosController` el `[Authorize]` está por acción, no en la clase.
+| Método | Ruta | Rate limit | Qué hace |
+|---|---|---|---|
+| POST | `/api/Auth/register` | `register` | Registra un negocio. Requiere header `X-Admin-Key`. Genera el `SlugLocal` desde `NombreLocal`. |
+| POST | `/api/Auth/login` | `login` | Login, devuelve `{ token }`. |
+| GET | `/api/public/locales/{slug}/menu` | — | Catálogo público (cacheado 60 s, header `X-Cache: HIT/MISS`). 404 si el local no existe o está inactivo. |
+| GET | `/api/public/pedidos/{codigoSeguimiento}/estado-pago` | `consultaPublica` | Devuelve **solo** `Encontrado`, `Estado`, `MercadoPagoStatus`, `Total`, `LinkWhatsapp`. Sin datos personales. |
+| POST | `/api/public/locales/{slug}/pedidos` | `pedidoPublico` | Crea pedido. Devuelve `PedidoCreateResponseDTO` con `ResumenWhatsApp` y `CodigoSeguimiento`. Definido en `PedidosController` con ruta absoluta. |
+| POST | `/api/public/locales/{slug}/pedidos/{pedidoId}/preferencia-mp` | — | Crea la preferencia de pago. Body: `{ codigoSeguimiento }`. |
+| POST | `/api/public/locales/{slug}/cupones/validar` | `consultaPublica` | Valida cupón contra un subtotal. `[AllowAnonymous]` en `CuponesController`. |
+| GET | `/api/MercadoPago/oauth/callback` | — | Callback OAuth. `[AllowAnonymous]`; la seguridad la da el `state`. Redirige al front admin. |
+| POST | `/api/MercadoPago/webhook` | — (a propósito) | Webhook de pagos. `[AllowAnonymous]`; la seguridad la da la firma HMAC. Responde 200 salvo error grave. |
+| POST | `/api/MercadoPago/dev/simular-webhook-aprobado` | — | **Solo Development**: simula un pago aprobado (404 fuera de Development). |
+
+> Los endpoints públicos de pedidos y cupones viven en controllers con ruta absoluta. `CuponesController` tiene `[Authorize]` a nivel de clase y `[AllowAnonymous]` en el endpoint público; en `PedidosController` el `[Authorize]` está por acción, no en la clase. Para resolver el local, los cuatro endpoints con `{slug}` usan `ObtenerActivoPorSlugAsync`; un local inactivo responde 404 en menú, pedidos y cupones, y 400 (`ValidacionException`) en preferencia-mp.
 
 ### Privados (JWT `Bearer`)
 
@@ -235,7 +244,7 @@ Rutas reales tomadas de los controllers. `[controller]` resuelve al nombre sin s
 | Método | Ruta | Qué hace |
 |---|---|---|
 | GET | `/api/Administrador/{id}` | Obtiene el negocio. Valida pertenencia y devuelve un DTO sin secretos. |
-| PATCH | `/api/Administrador/{id}/local` | Patch parcial. Verifica `id == adminId` del token. |
+| PATCH | `/api/Administrador/{id}/local` | Patch parcial (incluye `SlugLocal` y `EsActivo`). Verifica `id == adminId` del token. Un slug inválido, reservado o en uso responde 400 `{ mensaje }`. |
 
 > Este controller se redujo deliberadamente. El listado de todos los administradores y el CRUD que recibía la entidad cruda se eliminaron en el commit `1a43c79`.
 
@@ -286,7 +295,7 @@ Rutas reales tomadas de los controllers. `[controller]` resuelve al nombre sin s
 
 | Método | Ruta | Qué hace |
 |---|---|---|
-| GET | `/api/Pedidos?estado=&desde=&hasta=&formaPago=&formaEntrega=` | Lista con filtros. |
+| GET | `/api/Pedidos?estado=&desde=&hasta=&formaPago=&formaEntrega=&page=1&pageSize=25` | Lista paginada con filtros. Devuelve `PagedResultDTO<PedidoListItemResponseDTO>` (§6.12). |
 | GET | `/api/Pedidos/{id}` | Detalle con desglose de totales y datos de MP. |
 | PATCH | `/api/Pedidos/{id}/estado` | Cambia estado: descuenta o repone stock y gestiona el cupón. |
 | GET | `/api/Pedidos/{id}/resumen` | Resumen para WhatsApp. |
@@ -341,6 +350,8 @@ Se usa para `MercadoPagoAccessToken` y `MercadoPagoRefreshToken` en la tabla `Ad
 
 **Webhook:** valida la firma HMAC del header `x-signature` (formato `ts=...,v1=...`) contra `MercadoPago:WebhookSecret`. La idempotencia la da el índice único `(PaymentId, Status)`, no un chequeo en código. Guarda el payload crudo en `RawWebhookData`. Al confirmar un pago emite `PagoConfirmado` por SignalR.
 
+**Configuración perezosa:** el constructor de `MercadoPagoService` **ya no lanza** si faltan claves de `MercadoPago:*`; las lee como nullables y las valida al usarlas (`RequireConfig`, que lanza `InvalidOperationException("<clave> no configurado")`). Motivo: el servicio se inyecta en `PedidosController`, y una config de MP ausente tumbaba también los pedidos en efectivo o transferencia. `CrearPreferenciaPago` resuelve el local con `ObtenerActivoPorSlugAsync`.
+
 **Estado de la integración:** funcional, con tres huecos conocidos (ver §8).
 
 ### 6.4 Almacenamiento e imágenes
@@ -387,6 +398,79 @@ Funciona tanto sobre stock simple del producto como sobre el de una variante (`v
 
 Es el único subsistema con manejo explícito de zona horaria: resuelve `TimeZoneInfo` de Argentina una vez en un campo estático, convierte UTC → Argentina para calcular los rangos, y de vuelta a UTC para consultar. Sin esto, "ventas de hoy" arrancaría a las 21:00 del día anterior.
 
+### 6.8 Slug del local (`SlugHelper` + `AdministradorRepository`)
+
+**Fuente única de verdad.** `Helpers/SlugHelper.cs` define formato, reservados y generación; ningún otro código arma slugs. Los dos algoritmos incompatibles anteriores (SQL sin acentos vs. `Slugify()` en memoria) ya no existen.
+
+- **Persistido:** `Administrador.SlugLocal`, `nvarchar(60)` NOT NULL, índice único. Migración `AddSlugLocalToAdministrador`: pobló los administradores existentes con valores fijos (para no cambiar las URLs vigentes) antes de pasar a NOT NULL.
+- **Resolución:** `IAdministradorRepository.ObtenerActivoPorSlugAsync(slug)` normaliza (`Trim` + minúsculas), devuelve `null` si queda vacío, y consulta en SQL `EsActivo && SlugLocal == normalizado` (`AsNoTracking`). Es la única vía en menú, pedido público, preferencia MP y validación de cupón. **Un local inactivo no resuelve.** Un slug con mayúsculas resuelve; uno con acentos ("café") no, porque ningún slug persistido los tiene.
+- **Formato válido:** `^[a-z0-9]+(-[a-z0-9]+)*$`, máximo 60 (`SlugHelper.MaxLength`).
+- **`Slugify`:** minúsculas, sin acentos (ñ→n), sin puntuación; espacios, `_` y `-` colapsan en un guion; recorta a 60. Devuelve `""` si no queda nada alfanumérico (Register responde 400).
+- **Reservados** (`SlugHelper.Reservados`, comparación ordinal): `admin, assets, api, www, static, public, login, health, status, blog, help, soporte, terminos, privacidad, well-known`. Existen porque colisionan con rutas del frontend. Los validan Register (vía `GenerarSlugUnicoAsync`) y el PATCH (`ValidarNuevoSlugAsync`).
+- **Alta:** `POST /api/Auth/register` deriva el slug de `NombreLocal` con `Slugify` y `GenerarSlugUnicoAsync`, que ante reservado o duplicado agrega sufijo `-2`, `-3`, … (`ConSufijo`, recortando la base para no pasar de 60).
+- **Cambio manual:** `PATCH /api/Administrador/{id}/local` con `SlugLocal` → `ValidarNuevoSlugAsync` (formato, reservado, unicidad excluyendo al propio admin) → 400 `{ mensaje }` si falla. **Renombrar `NombreLocal` no toca el slug.** Cambiar el slug a mano sí rompe los links ya compartidos.
+- `ExisteSlugAsync` no mira reservados; solo `GenerarSlugUnicoAsync` y `ValidarNuevoSlugAsync` lo hacen. Dos altas simultáneas con el mismo nombre pueden chocar en el índice único y terminar en 500 (ventana mínima; el índice garantiza integridad).
+
+### 6.9 `ForwardedHeaders` y por qué `ForwardLimit = 1`
+
+Detrás del front end de Azure App Service, `RemoteIpAddress` sería la IP interna del proxy. Para recuperar la IP real (rate limiting, logs) y el esquema original (`UseHttpsRedirection` entra en loop de redirects sin `X-Forwarded-Proto`) se leen `X-Forwarded-For` y `X-Forwarded-Proto`.
+
+Configuración (`Program.cs`): `ForwardedHeaders = XForwardedFor | XForwardedProto`, `ForwardLimit = 1`, `KnownNetworks` y `KnownProxies` vacíos (la IP del proxy de App Service es privada y cambia; por defecto solo se confía en loopback).
+
+- **Por qué `ForwardLimit = 1`:** se toma **solo la entrada más a la derecha** del `X-Forwarded-For`, la que agregó el front end de Azure. Todo lo que el cliente inyecte en el header queda a la izquierda y se ignora. Con un límite mayor, un atacante podría falsificar su IP (y esquivar el rate limiting) mandando `X-Forwarded-For: 1.2.3.4`.
+- **Doble registro:** App Service Linux ya define `ASPNETCORE_FORWARDEDHEADERS_ENABLED=true`, que registra su propio middleware. Nuestro `Configure<ForwardedHeadersOptions>` se ejecuta después y **pisa sus opciones**. Por eso, si esa variable está en `true`, `Program.cs` **no** llama a `UseForwardedHeaders()`: una segunda pasada consumiría la siguiente entrada del XFF, justo la que controla el cliente.
+- **Posición:** primero en el pipeline, antes del manejo de excepciones, `UseHttpsRedirection`, CORS, rate limiter y auth.
+- **La trampa de Cloudflare (inferencia, no está en el código; verificar):** si se pone Cloudflare (u otro proxy/CDN) delante de la API, el XFF que llega a Azure pasa a ser `cliente, IP-de-Cloudflare`, y Azure agrega la IP del edge de Cloudflare como última entrada. Con `ForwardLimit = 1`, `RemoteIpAddress` sería **la IP de Cloudflare**, no la del comprador: todos los usuarios que entran por el mismo edge comparten partición de rate limit (se bloquean entre sí) y los logs pierden la IP real. Subir a `ForwardLimit = 2` arregla eso pero solo si **todo** el tráfico pasa por Cloudflare; si alguien pega directo al `*.azurewebsites.net`, la entrada de la izquierda la controla el cliente y vuelve el spoofing. Opciones seguras: restringir el origen a las IPs de Cloudflare, o leer `CF-Connecting-IP` solo cuando la conexión viene de rangos de Cloudflare. Lo mismo vale para Front Door o cualquier CDN. El comentario en `Program.cs` menciona Front Door/CDN, no Cloudflare.
+- No hay endpoint de diagnóstico de IP: el temporal (`DiagnosticoController`) se agregó para validar esto y se eliminó.
+
+### 6.10 Rate limiting
+
+`Microsoft.AspNetCore.RateLimiting` (incluido en el framework). Ventana deslizante (5 segmentos), particionada por `RemoteIpAddress` (`"sin-ip"` si es nulo), `QueueLimit = 0`. Respuesta al exceder: **429** con `{ "error": "Demasiados intentos, probá de nuevo en unos minutos" }` (genérico, sin `Retry-After`); cada rechazo se loguea como warning con política, IP, método y ruta.
+
+| Política | Límite | Ventana | Aplicada en |
+|---|---|---|---|
+| `login` | 5 | 5 min | `POST /api/Auth/login` |
+| `register` | 3 | 15 min | `POST /api/Auth/register` |
+| `pedidoPublico` | 10 | 10 min | `POST /api/public/locales/{slug}/pedidos` |
+| `consultaPublica` | 30 | 1 min | `GET .../estado-pago` y `POST .../cupones/validar` |
+
+Se aplica con `[EnableRateLimiting("nombre")]` por acción. **No hay límite global**: lo que no lleva el atributo no está limitado.
+
+**Sin rate limit, a propósito o por omisión:**
+- `POST /api/MercadoPago/webhook` — **a propósito**: MP reenvía y bursts legítimos no deben rebotar; la firma HMAC es la defensa.
+- `GET /api/public/locales/{slug}/menu` — la caché de 60 s lo absorbe para slugs válidos. Un slug inexistente nunca se cachea (cada intento pega a la base).
+- `POST .../pedidos/{pedidoId}/preferencia-mp` — pública; exige código de seguimiento válido pero no tiene límite.
+- `GET /api/MercadoPago/oauth/callback`, y todos los endpoints autenticados (se apoyan en el JWT).
+
+**Limitaciones:**
+- **El estado vive en memoria de cada instancia.** Con N instancias del App Service el límite efectivo es N veces mayor y no se comparte; se reinicia con cada reinicio del proceso. Escalar a más de una instancia requiere store distribuido (Redis).
+- Depende de §6.9: si la IP real no se recupera bien, todos comparten una partición o el límite se esquiva.
+- Una IP compartida (NAT de oficina, CGNAT) comparte cupo: 5 logins por 5 min por IP.
+
+### 6.11 Caché del menú público
+
+Objetivo: el menú se arma con una consulta de cinco niveles de `Include` más imágenes y descuentos; es lo más pedido de la API.
+
+- **`IMenuPublicoCache`** (singleton, sobre `IMemoryCache`). Clave: `menu-publico:{slugNormalizado}`. **TTL absoluto: 60 s.** Guarda el `MenuPublicoResponseDTO` ya mapeado más la ruta relativa del logo (`MenuPublicoCacheado`); la URL absoluta del logo depende del `Host` y se arma en cada respuesta.
+- **Invalidación por local, no por clave:** hay un `CancellationTokenSource` por `administradorId`; cada entrada se registra con su `IChangeToken`. `Invalidar(adminId)` cancela el token y expulsa todas las entradas de ese local, bajo cualquier slug (cubre el cambio de slug).
+- **Token antes de leer:** `PublicController.GetMenu` toma el token **antes** de consultar la base. Si el local se invalida mientras se arma el menú, la entrada nace expirada y no queda dato viejo.
+- **Solo se cachea el éxito:** inexistente o inactivo → 404 sin cachear. Respuesta con header `X-Cache: HIT` o `MISS`.
+- **`MenuCacheInvalidationInterceptor`** (`Data/`, scoped, registrado en el `DbContext`) es la **única** fuente de invalidación: antes de cada `SaveChanges` recorre el `ChangeTracker` y resuelve qué locales cambian el menú; al guardar invalida. Los controllers y services no conocen la caché. Cubre: `Categoria`, `Producto`, `Imagen`, `Descuento` (con `AdministradorId` propio); `Administrador` modificado o borrado (no recién agregado); y `ProductoExtra`, `TipoVariante`, `VarianteProducto` (por `ProductoId`) y `OpcionVariante` (por `TipoVarianteId` → `Producto`), que consultan el dueño en una query extra.
+- **Transacciones explícitas:** los locales tocados dentro de una transacción se invalidan otra vez en el `Commit` (un GET entre `SavedChanges` y el commit podría recachear el dato viejo); un `Rollback` los descarta. Si `SaveChanges` falla, se limpian los pendientes.
+- **El bypass de `ExecuteDeleteAsync`/`ExecuteUpdateAsync`:** estos métodos ejecutan SQL directo y **no pasan por `SaveChanges`**, así que el interceptor no los ve. Hoy hay un solo caso, `VarianteProductoRepository.EliminarTodas` (`ExecuteDeleteAsync`), que invalida a mano con `Invalidar(adminId)`. Lo mismo vale para SQL crudo y migraciones. Cualquier `ExecuteUpdate/Delete` nuevo sobre algo visible en el menú debe invalidar explícitamente.
+- **Para agregar una entidad que se muestra en el menú:** sumarla al `switch` de `ResolverAdministradores`. Si no, el menú queda desactualizado hasta el TTL.
+- **Límites:** (1) es caché **por instancia**: con varias instancias, una escritura invalida solo la instancia que la atendió y las demás sirven el menú viejo hasta 60 s. (2) El TTL también acota los descuentos con `FechaInicio`/`FechaFin`: que un descuento empiece o venza no dispara invalidación, se refleja en ≤ 60 s. (3) Los pedidos no invalidan, salvo que cambien stock de un producto/variante vía `SaveChanges` (sí invalida, porque el stock de la variante se expone en el menú).
+
+### 6.12 Pedido público y listado paginado
+
+**Creación (`PedidoService.CrearPublicoPorSlug`).** Validaciones en orden: al menos un detalle; `NombreCliente` y `TelefonoCliente` no vacíos (antes llegaban `null` y `SaveChanges` fallaba con NOT NULL → 500); `FormaEntrega` en la whitelist `Delivery` / `Retira` (comparación `OrdinalIgnoreCase`); local activo por slug; efectivo con monto; dirección si es delivery; cantidades > 0; producto disponible del tenant; variante válida; extras del producto; cupón. Los errores de entrada son `InvalidOperationException` (→ 400 con texto plano), `ValidacionException` para cupón (→ 400 `{ mensaje }`), `KeyNotFoundException` (→ 404). Cualquier otra excepción: 500 con mensaje genérico (el detalle solo va al log).
+
+**Totales y `Subtotal`.** El `PedidoCreateResponseDTO` y el resumen de WhatsApp usan `Subtotal` = **neto** (productos + extras − descuentos − cupón), de modo que `Subtotal + CostoEnvio == Total`. El detalle admin y el ticket **no** siguen esa definición exacta (ver §8, punto 5).
+
+**Listado (`GET /api/Pedidos`).** `page` ≥ 1 (default 1), `pageSize` 1–100 (default 25); fuera de rango lanza `ValidacionException` (hoy sin catch en el controller, §2). Filtros exactos por `estado`, `formaPago`, `formaEntrega` y rango `desde <= Fecha <= hasta`, siempre acotado por `AdministradorId`. **Orden determinista `Fecha DESC, Id DESC`** (el desempate por `Id` evita que filas con la misma fecha salten o se repitan entre páginas). La paginación y la **proyección a `PedidoListItemResponseDTO`** (`Id, Fecha, Estado, NombreCliente, FormaPago, FormaEntrega, Total, ItemsCount`) ocurren en SQL, sin `Include`; `ItemsCount` es un `COUNT` de `Detalles`. Respuesta `PagedResultDTO<T>`: `Items, Total, Page, PageSize, TotalPages`.
+
+**`estado-pago`.** Busca por `CodigoSeguimiento` y devuelve únicamente `Encontrado, Estado, MercadoPagoStatus, Total, LinkWhatsapp`. Antes devolvía el resumen completo (nombre, teléfono, dirección). El código de seguimiento (12 hex en `XXXX-XXXX-XXXX`, derivado de un GUID) es el único secreto.
+
 ---
 
 ## 7. Configuración y entorno
@@ -406,6 +490,7 @@ Es el único subsistema con manejo explícito de zona horaria: resuelve `TimeZon
 | `MercadoPago:RedirectUri` / `:BackendUrl` | Para pagos | Deben ser URLs públicas. |
 | `MercadoPago:AuthBaseUrl` / `:ApiBaseUrl` | Para pagos | — |
 | `MercadoPago:FrontendAdminUrl` / `:FrontendClientUrl` | Para pagos | Destino de las redirecciones. |
+| `ASPNETCORE_FORWARDEDHEADERS_ENABLED` | No (lo setea App Service Linux) | Si es `true`, `Program.cs` no aplica `UseForwardedHeaders` por su cuenta (§6.9). |
 | `Storage:Provider` | No | `"AzureBlob"` o cualquier otro valor → local. |
 | `Storage:Local:BasePath` | No | Default `uploads`. |
 | `Storage:AzureBlob:ConnectionString` / `:ContainerName` | Si `Provider=AzureBlob` | Falla al construir el provider si faltan. |
@@ -418,13 +503,15 @@ Es el único subsistema con manejo explícito de zona horaria: resuelve `TimeZon
 
 ### Migraciones
 
-22 migraciones, de `20250512004358_InitialCreate` a `20260611235002_AddOrdenToCategoria`. La evolución del esquema se lee como la del producto: pedidos y detalles → multi-tenancy (`20250915224651_multitenant-v1`) → dirección y envío → comentarios → imágenes → variantes y stock → descuentos y cupones → Mercado Pago en tres pasos → orden de categorías.
+24 migraciones, de `20250512004358_InitialCreate` a `20261005233626_AddIndexPedidoCodigoSeguimiento`. La evolución del esquema se lee como la del producto: pedidos y detalles → multi-tenancy (`20250915224651_multitenant-v1`) → dirección y envío → comentarios → imágenes → variantes y stock → descuentos y cupones → Mercado Pago en tres pasos → orden de categorías → `SlugLocal` único (`20261005164443`) → índice por `CodigoSeguimiento`.
+
+> `AddSlugLocalToAdministrador` pobló los administradores existentes con slugs fijos por `Id` (para no cambiar URLs vigentes) antes de volver la columna NOT NULL; falla si queda alguno sin slug. Cualquier base nueva con filas previas necesita revisar esa migración.
 
 **No hay `Database.Migrate()` en `Program.cs`**: las migraciones se aplican manualmente con `dotnet ef database update`.
 
 ### Seed
 
-Bloque al final de `Program.cs`, **condicionado a `IsDevelopment()`**. Si la tabla `Administradores` está vacía crea un admin de prueba con credenciales fijas y `NombreLocal` vacío (por lo tanto, slug vacío: ningún endpoint público lo resuelve). Para crear negocios reales, usar `POST /api/Auth/register`.
+Bloque al final de `Program.cs`, **condicionado a `IsDevelopment()`**. Si la tabla `Administradores` está vacía crea un admin de prueba con credenciales fijas, `NombreLocal` vacío y `SlugLocal = "admin-prueba"` (necesario por el índice único NOT NULL). Para crear negocios reales, usar `POST /api/Auth/register`.
 
 ---
 
@@ -434,21 +521,23 @@ Ordenado por impacto.
 
 1. **Filtros multi-tenant manuales.** `HasQueryFilter` comentado en `AppDbContext`. Toda consulta debe filtrar `AdministradorId` a mano; un olvido es fuga entre tenants. **Prioridad máxima.**
 
-2. **Dos algoritmos de slug incompatibles.** Bug real, reproducible:
-   - `PublicController.GetMenu` y `MercadoPagoService.CrearPreferenciaPago` resuelven en **SQL**: `NombreLocal.ToLower().Replace(" ", "-")`, **sin** quitar acentos.
-   - `PedidoService.CrearPublicoPorSlug` y `CuponService` usan `Slugify()` en **memoria**, que sí normaliza acentos (á→a, ñ→n) y colapsa espacios y guiones bajos.
-   - Para un negocio llamado "Café León": el menú se sirve en `café-león` pero crear el pedido exige `cafe-leon`. El comprador ve la carta y no puede comprar.
+2. **`ValidacionException` no tiene traducción global.** El middleware de `Program.cs` la trata como 500; cada controller debe atraparla. Hoy `GET /api/Pedidos?page=0` (o `pageSize` fuera de 1–100), y `GET estado` / `POST desconectar` de MercadoPago ante un admin inexistente, devuelven 500 en lugar de 400. Además los formatos de error del borde no son uniformes: algunos devuelven `{ mensaje }`, otros texto plano (`BadRequest(ex.Message)` en el pedido público, `Unauthorized("...")` en Auth).
 
-3. **Slug derivado, no persistido.** Se calcula desde `NombreLocal` en cada request. Renombrar el negocio rompe todos los links públicos existentes. Además dos negocios cuyos nombres difieran solo en acentos o espacios pueden colisionar. Corresponde persistir una columna `Slug` única e indexada.
+3. **`FormaEntrega`: whitelist case-insensitive, uso case-sensitive.** `CrearPublicoPorSlug` acepta `"delivery"` o `"DELIVERY"` (set `OrdinalIgnoreCase`), pero después compara `== "Delivery"` en la validación de dirección, el costo de envío, el resumen de WhatsApp y el ticket. Un `"delivery"` se guarda tal cual, no cobra envío, no exige dirección y se rotula "Retira en el local". Conviene normalizar al valor canónico tras validar.
 
-4. **Pedido público puede devolver 500 con datos incompletos.** `PedidoPublicCreateRequestDTO.NombreCliente` y `.TelefonoCliente` son `string?`, pero `Pedido.NombreCliente`/`.TelefonoCliente` son `[Required]` (NOT NULL en la base). `CrearPublicoPorSlug` valida cantidad, producto, variante, forma de pago y dirección de delivery, **pero no valida estos dos campos**. Si llegan `null`, `SaveChanges` falla con violación de NOT NULL y sale como 500 genérico. *(Verificado: sigue presente.)*
+4. **Slugs: resuelto, con dos cabos sueltos.** (a) El menú, el pedido, la preferencia de MP y los cupones ya resuelven por una única vía (§6.8). (b) `README.md` todavía describe los dos algoritmos y el slug derivado como deuda vigente (líneas ~74 y ~414): está desactualizado. (c) Un administrador que desactiva su local (`EsActivo = false`) deja de resolver en todos los endpoints públicos, pero los pedidos ya creados siguen consultables por `estado-pago`.
 
-5. **`CostoEnvio` no se persiste como columna.** Va sumado dentro de `Pedido.Total` y se reconstruye por resta en tres lugares, con fórmulas que no coinciden:
+5. **`CostoEnvio` no se persiste como columna, y `Subtotal` no significa lo mismo en todos los DTOs.** Va sumado dentro de `Pedido.Total` y se reconstruye por resta en tres lugares, con fórmulas que no coinciden:
    - `PedidosController.Get(id)`: `Total - subtotalConDescuentos - extras`
    - `PedidoService.GetTicketAsync`: `Total - subtotal + MontoDescuentoCupon`
    - `GenerarResumenWhatsApp`: `Total - (subtotalBruto - descProductos - descCupón)`
 
-   Frágil ante cualquier cambio en el cálculo de totales.
+   Estado real de `Subtotal`:
+   - **Respuesta de creación** (`PedidoCreateResponseDTO`) y **resumen de WhatsApp**: neto con extras. `Subtotal + CostoEnvio == Total`.
+   - **Detalle admin** (`PedidoDetailResponseDTO`): neto **sin extras** (`SubtotalSinDescuentos − descProductos − descCupón`; `SubtotalSinDescuentos` no incluye extras). Hay que sumar extras para llegar al `Total`.
+   - **Ticket** (`TicketResponseDTO`): suma de líneas (precio con descuento de línea + extras) × cantidad; **no resta el cupón ni el descuento a pedido completo**. El `CostoEnvio` del ticket (`Total − subtotal + MontoDescuentoCupon`) sale mal cuando hubo un descuento a pedido completo.
+
+   Frágil ante cualquier cambio en el cálculo de totales. La solución de fondo es persistir `CostoEnvio` y los extras en `Pedido`.
 
 6. **Mercado Pago: sin renovación de token.** `MercadoPagoRefreshToken` se guarda cifrado y `MercadoPagoTokenExpiresAt` se registra, pero **no existe ningún flujo que use el refresh token**. Al expirar, `GET /api/MercadoPago/diagnostico` lo informa y el negocio debe reconectar a mano.
 
@@ -471,6 +560,12 @@ Ordenado por impacto.
 15. **Sin tests.** No hay proyecto de tests en la solución. La deuda más grande.
 
 16. **`appsettings.Example.json` incompleto.** Ver §7.
+
+17. **Rate limiting y caché por instancia.** Ambos viven en memoria del proceso (§6.10, §6.11). Escalar a más de una instancia multiplica los límites y deja menús viejos hasta 60 s. Junto con el `state` de OAuth (punto 9) son tres razones para un store distribuido antes de escalar horizontalmente.
+
+18. **`ForwardLimit = 1` supone App Service sin proxy delante.** Cualquier CDN o proxy nuevo (Cloudflare, Front Door) degrada la IP real a la IP del proxy. Ver §6.9.
+
+19. **Código muerto en repos/servicios.** `ObtenerTodos()` se eliminó del repositorio y servicio de pedidos, pero sigue en `Administrador`, `DetallePedido`, `Producto` y `ProductoExtra` (interfaz, repo y servicio), sin ningún llamador. `IDetallePedidoService` no está registrado en DI y `IDetallePedidoRepository` está registrado dos veces. `PedidosController.Get(id)` arma el DTO leyendo `AppDbContext` directo, salteándose el servicio.
 
 ---
 
@@ -500,10 +595,10 @@ Se migró de `windows-2022` + `VSBuild` + paquete WebDeploy a Linux + `dotnet pu
 
 ## 10. Higiene del repositorio
 
-**Secretos:** ningún archivo con credenciales reales está trackeado actualmente. `appsettings.json` y `appsettings.Development.json` están cubiertos por `Eat_Experience/.gitignore` (líneas 486-487). `appsettings.Example.json` sí está versionado, pero solo con placeholders.
+**Secretos:** ningún archivo con credenciales reales está trackeado actualmente. `appsettings.json` y `appsettings.Development.json` están cubiertos por `Eat_Experience/.gitignore`. `appsettings.Example.json` sí está versionado, pero solo con placeholders.
 
 > **Historial:** hubo una fuga de credenciales por `build_temp/` (output de compilación commiteado por error) entre `b478f78` y `e990fd5`. Los archivos se eliminaron del árbol pero **siguen siendo recuperables desde el historial**, y el repositorio es público. Existe una auditoría completa fuera del repositorio con el detalle y el plan de rotación. **Rotar las credenciales es lo que revoca el acceso; borrar el archivo no.**
 
-**Archivos trackeados que no deberían estarlo:** 21 archivos bajo `.vs/` (incluidos índices de Copilot, `.suo`, `slnx.sqlite`) y `obj/Eat_Experience.csproj.EntityFrameworkCore.targets`. El `.gitignore` los cubre, pero git ignora esas reglas para archivos que ya están en el índice: hay que sacarlos con `git rm --cached`. No contienen secretos (verificado); son ruido que genera conflictos entre máquinas.
+**Archivos trackeados que no deberían estarlo:** ninguno. `.vs/` y `obj/` se sacaron del índice en el commit `42c52ec`.
 
-**`.gitignore`:** hay dos, uno en la raíz y otro en `Eat_Experience/`. Entre ambos la cobertura es correcta y completa para `appsettings` reales, `.vs/`, `obj/`, `bin/`, `uploads/` y `build_temp/`.
+**`.gitignore`:** hay dos, uno en la raíz y otro en `Eat_Experience/`. Entre ambos la cobertura es correcta para `appsettings` reales, `.vs/`, `obj/`, `bin/`, `uploads/` y `build_temp/` (verificado con `git check-ignore`).
