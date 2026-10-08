@@ -176,12 +176,22 @@ namespace Vinto.Api.Controllers
         }
 
         // La URL absoluta del logo depende del Host del request: no se cachea, se arma acá.
+        // Con Blob Storage el valor guardado ya es absoluto (https://...); con almacenamiento local es
+        // relativo (/uploads/...). Solo se antepone el host a los relativos.
         private static MenuPublicoResponseDTO ArmarRespuesta(MenuPublicoCacheado entrada, string baseUrl)
         {
             var menu = entrada.Menu;
+            var logo = entrada.LogoImagenPath;
+            var logoAbsoluto = logo == null
+                ? null
+                : logo.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                  || logo.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                    ? logo
+                    : baseUrl + logo;
+
             return new MenuPublicoResponseDTO
             {
-                Local = menu.Local.ConLogoImagenUrl(entrada.LogoImagenPath != null ? baseUrl + entrada.LogoImagenPath : null),
+                Local = menu.Local.ConLogoImagenUrl(logoAbsoluto),
                 Categorias = menu.Categorias,
                 DescuentosPedidoCompleto = menu.DescuentosPedidoCompleto
             };
