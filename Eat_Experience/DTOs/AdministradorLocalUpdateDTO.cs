@@ -9,7 +9,8 @@ namespace Vinto.Api.DTOs
         public string? Direccion { get; set; }
         public string? LinkWhatsapp { get; set; }
         public string? LogoUrl { get; set; }
-        public bool? EsActivo { get; set; }
+        // Sin EsActivo a propósito: es "cuenta habilitada" y no lo cambia el dueño. El abrir/cerrar del local
+        // vive en api/Administrador/local/cierre-manual y en los horarios (api/Administrador/local/horarios).
         public string? AliasTransferencia { get; set; }
         public string? TitularCuenta { get; set; }
         public string? Horarios { get; set; }

@@ -126,8 +126,9 @@ namespace Vinto.Api.Data
                     case Producto p: destino.Add(p.AdministradorId); break;
                     case Imagen i: destino.Add(i.AdministradorId); break; // producto, categoría y logo
                     case Descuento d: destino.Add(d.AdministradorId); break;
+                    case HorarioLocal h: destino.Add(h.AdministradorId); break; // horarios estructurados
 
-                    // Datos del local: nombre, logo, envío, horarios, abierto/cerrado, alias, MP conectado
+                    // Datos del local: nombre, logo, envío, horarios, cierre manual, zona horaria, alias, MP conectado
                     case Administrador a when entry.State != EntityState.Added: destino.Add(a.Id); break;
 
                     // Hijos de Producto: el local se resuelve por el producto

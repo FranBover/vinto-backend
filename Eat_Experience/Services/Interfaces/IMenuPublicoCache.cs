@@ -1,11 +1,20 @@
 using Microsoft.Extensions.Primitives;
 using Vinto.Api.DTOs;
+using Vinto.Api.Models;
 
 namespace Vinto.Api.Services.Interfaces
 {
+    // Datos de horario que se guardan junto al menú para calcular el estado en cada request. Son datos, no
+    // un resultado: lo que depende de la hora (¿está abierto ahora?) se calcula al responder, fuera de la caché.
+    public sealed record HorarioMenuCacheado(
+        int AdministradorId,
+        string ZonaHoraria,
+        bool CerradoManualmente,
+        IReadOnlyList<HorarioLocal> Horarios);
+
     // Lo que se cachea del menú público: el DTO ya mapeado y la ruta relativa del logo
     // (la URL absoluta depende del Host de cada request y se arma al responder).
-    public sealed record MenuPublicoCacheado(MenuPublicoResponseDTO Menu, string? LogoImagenPath);
+    public sealed record MenuPublicoCacheado(MenuPublicoResponseDTO Menu, string? LogoImagenPath, HorarioMenuCacheado Horario);
 
     public interface IMenuPublicoCache
     {

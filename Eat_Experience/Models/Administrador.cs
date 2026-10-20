@@ -58,6 +58,13 @@ namespace Vinto.Api.Models
         [MaxLength(500)]
         public string? Horarios { get; set; }
 
+        // Zona horaria IANA con la que se interpretan los HorarioLocal del local.
+        [Required, MaxLength(64)]
+        public string ZonaHoraria { get; set; } = "America/Argentina/Buenos_Aires";
+
+        // Cierre forzado por el dueño: pisa a los horarios. No toca EsActivo (que es solo "cuenta habilitada").
+        public bool CerradoManualmente { get; set; } = false;
+
         [Url, MaxLength(500)]
         public string? UbicacionUrl { get; set; }
 

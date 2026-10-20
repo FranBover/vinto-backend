@@ -65,7 +65,6 @@ namespace Vinto.Api.Controllers
             if (dto.Direccion != null) admin.Direccion = dto.Direccion;
             if (dto.LinkWhatsapp != null) admin.LinkWhatsapp = dto.LinkWhatsapp;
             if (dto.LogoUrl != null) admin.LogoUrl = dto.LogoUrl;
-            if (dto.EsActivo.HasValue) admin.EsActivo = dto.EsActivo.Value;
             if (dto.AliasTransferencia != null) admin.AliasTransferencia = dto.AliasTransferencia;
             if (dto.TitularCuenta != null) admin.TitularCuenta = dto.TitularCuenta;
             if (dto.Horarios != null) admin.Horarios = dto.Horarios;

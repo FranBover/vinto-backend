@@ -174,6 +174,11 @@ namespace Vinto.Api.Controllers
             {
                 return NotFound(ex.Message);
             }
+            catch (Vinto.Api.Helpers.LocalCerradoException ex)
+            {
+                // Antes que ValidacionException (que acá es 400): este es un 409 con código y próxima apertura.
+                return StatusCode(409, new { mensaje = ex.Message, codigo = ex.Codigo, proximoCambio = ex.ProximoCambio });
+            }
             catch (Vinto.Api.Helpers.ValidacionException ex)
             {
                 return BadRequest(new { mensaje = ex.Message });

@@ -30,6 +30,8 @@ namespace Vinto.Api.Data
         public DbSet<PreviewActualizacionPrecios> PreviewsActualizacionPrecios { get; set; }
         public DbSet<PreviewActualizacionPreciosItem> PreviewActualizacionPreciosItems { get; set; }
 
+        public DbSet<HorarioLocal> HorariosLocal { get; set; }
+
         public DbSet<PagoMercadoPago> PagosMercadoPago => Set<PagoMercadoPago>();
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -40,6 +42,11 @@ namespace Vinto.Api.Data
             modelBuilder.Entity<Administrador>()
                 .Property(a => a.FechaRegistro)
                 .HasDefaultValueSql("GETUTCDATE()");
+
+            // Sin esto, la migración rellenaría los locales existentes con "" en vez de la zona por defecto.
+            modelBuilder.Entity<Administrador>()
+                .Property(a => a.ZonaHoraria)
+                .HasDefaultValue("America/Argentina/Buenos_Aires");
 
             modelBuilder.Entity<Pedido>()
                 .Property(p => p.Fecha)
@@ -436,6 +443,28 @@ namespace Vinto.Api.Data
 
             modelBuilder.Entity<PreviewActualizacionPreciosItem>()
                 .HasIndex(i => i.PreviewId);
+
+            // ---------------- HorarioLocal ----------------
+            // Administrador (1) - (N) HorarioLocal: al borrar el admin caen sus horarios.
+            modelBuilder.Entity<HorarioLocal>()
+                .HasOne(h => h.Administrador)
+                .WithMany()
+                .HasForeignKey(h => h.AdministradorId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // Una fila por día y local (el índice también cubre la búsqueda por AdministradorId).
+            modelBuilder.Entity<HorarioLocal>()
+                .HasIndex(h => new { h.AdministradorId, h.DiaSemana })
+                .IsUnique();
+
+            // Red de seguridad a nivel base de datos; la validación con mensajes la hace HorarioLocalValidator.
+            // La collation de la base es case-insensitive: el CHECK acepta "turnos", el código solo "Turnos".
+            modelBuilder.Entity<HorarioLocal>().ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_HorariosLocal_DiaSemana", "[DiaSemana] BETWEEN 0 AND 6");
+                t.HasCheckConstraint("CK_HorariosLocal_Modo",
+                    $"[Modo] IN (N'{ModoHorario.Cerrado}', N'{ModoHorario.VeinticuatroHoras}', N'{ModoHorario.Turnos}')");
+            });
 
             // ---------------- PagoMercadoPago ----------------
             modelBuilder.Entity<PagoMercadoPago>()

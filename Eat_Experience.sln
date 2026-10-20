@@ -5,6 +5,8 @@ VisualStudioVersion = 17.12.35707.178 d17.12
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eat_Experience", "Eat_Experience\Vinto.Api.csproj", "{3E81CEAB-10DD-4B85-A460-D90ACC707B03}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Eat_Experience.Tests", "Eat_Experience.Tests\Eat_Experience.Tests.csproj", "{F1B43FFA-530A-4BE5-91B4-997DD8A11EB0}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{3E81CEAB-10DD-4B85-A460-D90ACC707B03}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{3E81CEAB-10DD-4B85-A460-D90ACC707B03}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{3E81CEAB-10DD-4B85-A460-D90ACC707B03}.Release|Any CPU.Build.0 = Release|Any CPU
+		{F1B43FFA-530A-4BE5-91B4-997DD8A11EB0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{F1B43FFA-530A-4BE5-91B4-997DD8A11EB0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{F1B43FFA-530A-4BE5-91B4-997DD8A11EB0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{F1B43FFA-530A-4BE5-91B4-997DD8A11EB0}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

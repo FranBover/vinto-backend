@@ -19,6 +19,7 @@ namespace Vinto.Api.Services.Implementaciones
         private readonly IHubContext<PedidosHub> _hubContext;
         private readonly IStockService _stockService;
         private readonly IDescuentoCalculatorService _calculatorService;
+        private readonly IEstadoLocalService _estadoLocalService;
         private readonly ILogger<PedidoService> _logger;
 
         public PedidoService(
@@ -28,10 +29,12 @@ namespace Vinto.Api.Services.Implementaciones
             IHubContext<PedidosHub> hubContext,
             IStockService stockService,
             IDescuentoCalculatorService calculatorService,
+            IEstadoLocalService estadoLocalService,
             ILogger<PedidoService> logger)
         {
             _pedidoRepository = pedidoRepository;
             _administradorRepository = administradorRepository;
+            _estadoLocalService = estadoLocalService;
             _context = context;
             _hubContext = hubContext;
             _stockService = stockService;
@@ -87,6 +90,10 @@ namespace Vinto.Api.Services.Implementaciones
 
             if (admin == null)
                 throw new KeyNotFoundException("Local no encontrado.");
+
+            // Iniciar un pedido con el local cerrado se rechaza ACÁ (409), antes de leer productos o crear nada.
+            // Pagar un pedido ya creado (preferencia de MP) no pasa por este chequeo, a propósito.
+            await _estadoLocalService.AsegurarAbiertoAsync(admin);
 
             if (request.FormaPago == "Efectivo" && request.MontoPagoEfectivo == null)
                 throw new InvalidOperationException("Debe indicar con cuánto pagará en efectivo.");

@@ -71,6 +71,8 @@ builder.Services.AddSingleton(sp =>
     sp.GetRequiredService<IOptions<JwtSettings>>().Value);
 
 // conexi�n a sqlserver
+// Fuente única de "ahora": los servicios reciben TimeProvider en vez de leer DateTime.UtcNow.
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<IMenuPublicoCache, MenuPublicoCache>();
 builder.Services.AddScoped<MenuCacheInvalidationInterceptor>();
 builder.Services.AddDbContext<AppDbContext>((sp, options) =>
@@ -111,6 +113,9 @@ builder.Services.AddScoped<IStockService, StockService>();
 builder.Services.AddScoped<IDescuentoService, DescuentoService>();
 builder.Services.AddScoped<ICuponService, CuponService>();
 builder.Services.AddScoped<IDescuentoCalculatorService, DescuentoCalculatorService>();
+builder.Services.AddScoped<IEstadoLocalCalculator, EstadoLocalCalculator>();
+builder.Services.AddScoped<IHorarioLocalService, HorarioLocalService>();
+builder.Services.AddScoped<IEstadoLocalService, EstadoLocalService>();
 builder.Services.AddScoped<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
 

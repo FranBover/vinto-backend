@@ -37,6 +37,9 @@ namespace Vinto.Api.Migrations
                     b.Property<bool>("AutoDeshabilitarSinStock")
                         .HasColumnType("bit");
 
+                    b.Property<bool>("CerradoManualmente")
+                        .HasColumnType("bit");
+
                     b.Property<decimal?>("CostoEnvio")
                         .HasColumnType("decimal(18,2)");
 
@@ -143,6 +146,13 @@ namespace Vinto.Api.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("nvarchar(20)");
+
+                    b.Property<string>("ZonaHoraria")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(64)
+                        .HasColumnType("nvarchar(64)")
+                        .HasDefaultValue("America/Argentina/Buenos_Aires");
 
                     b.HasKey("Id");
 
@@ -429,6 +439,50 @@ namespace Vinto.Api.Migrations
                         .IsUnique();
 
                     b.ToTable("DetallePedidoExtras");
+                });
+
+            modelBuilder.Entity("Vinto.Api.Models.HorarioLocal", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("AdministradorId")
+                        .HasColumnType("int");
+
+                    b.Property<int>("DiaSemana")
+                        .HasColumnType("int");
+
+                    b.Property<string>("Modo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<TimeOnly?>("Turno1Apertura")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("Turno1Cierre")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("Turno2Apertura")
+                        .HasColumnType("time");
+
+                    b.Property<TimeOnly?>("Turno2Cierre")
+                        .HasColumnType("time");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("AdministradorId", "DiaSemana")
+                        .IsUnique();
+
+                    b.ToTable("HorariosLocal", t =>
+                        {
+                            t.HasCheckConstraint("CK_HorariosLocal_DiaSemana", "[DiaSemana] BETWEEN 0 AND 6");
+
+                            t.HasCheckConstraint("CK_HorariosLocal_Modo", "[Modo] IN (N'Cerrado', N'24h', N'Turnos')");
+                        });
                 });
 
             modelBuilder.Entity("Vinto.Api.Models.Imagen", b =>
@@ -1134,6 +1188,17 @@ namespace Vinto.Api.Migrations
                     b.Navigation("DetallePedido");
 
                     b.Navigation("ProductoExtra");
+                });
+
+            modelBuilder.Entity("Vinto.Api.Models.HorarioLocal", b =>
+                {
+                    b.HasOne("Vinto.Api.Models.Administrador", "Administrador")
+                        .WithMany()
+                        .HasForeignKey("AdministradorId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Administrador");
                 });
 
             modelBuilder.Entity("Vinto.Api.Models.Imagen", b =>

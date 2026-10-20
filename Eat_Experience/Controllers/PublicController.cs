@@ -19,10 +19,14 @@ namespace Vinto.Api.Controllers
         private readonly IPedidoService _pedidoService;
         private readonly ILogger<PublicController> _logger;
         private readonly IMenuPublicoCache _menuCache;
+        private readonly IEstadoLocalCalculator _estadoCalculator;
+        private readonly TimeProvider _timeProvider;
 
-        public PublicController(AppDbContext context, IAdministradorRepository administradorRepository, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger, IMenuPublicoCache menuCache)
+        public PublicController(AppDbContext context, IAdministradorRepository administradorRepository, IDescuentoCalculatorService calculatorService, IPedidoService pedidoService, ILogger<PublicController> logger, IMenuPublicoCache menuCache, IEstadoLocalCalculator estadoCalculator, TimeProvider timeProvider)
         {
             _menuCache = menuCache;
+            _estadoCalculator = estadoCalculator;
+            _timeProvider = timeProvider;
             _context = context;
             _administradorRepository = administradorRepository;
             _calculatorService = calculatorService;
@@ -41,7 +45,7 @@ namespace Vinto.Api.Controllers
             if (slugNormalizado.Length > 0 && _menuCache.TryGet(slugNormalizado, out var cacheado) && cacheado != null)
             {
                 Response.Headers["X-Cache"] = "HIT";
-                return Ok(ArmarRespuesta(cacheado, baseUrl));
+                return Ok(MenuPublicoArmador.Armar(cacheado, baseUrl, CalcularEstado(cacheado)));
             }
 
             Response.Headers["X-Cache"] = "MISS";
@@ -55,6 +59,14 @@ namespace Vinto.Api.Controllers
             // Capturar ANTES de leer: si el local se invalida mientras se arma el menú,
             // la entrada nace expirada y no queda dato viejo.
             var tokenInvalidacion = _menuCache.ObtenerToken(administrador.Id);
+
+            // El local se leyó ANTES de capturar el token: si el dueño lo modificó justo en el medio, esa lectura es vieja
+            // y la invalidación ya pasó sin que el token la viera. Se relee por id (la resolución por slug no cambia) para
+            // que lo que se cachea del local (zona horaria, cierre manual, nombre, etc.) sea posterior al token.
+            var local = await _context.Administradores.AsNoTracking().FirstOrDefaultAsync(a => a.Id == administrador.Id);
+            if (local == null || !local.EsActivo)
+                return NotFound();
+            administrador = local;
 
             var categorias = await _context.Categorias
                 .Where(c => c.AdministradorId == administrador.Id)
@@ -98,6 +110,13 @@ namespace Vinto.Api.Controllers
                 .Where(d => d.AdministradorId == administrador.Id)
                 .ToListAsync();
 
+            // Horarios estructurados: datos puros, se cachean (se invalidan al cambiar horarios, zona o cierre manual).
+            var horarios = await _context.HorariosLocal
+                .AsNoTracking()
+                .Where(h => h.AdministradorId == administrador.Id)
+                .OrderBy(h => h.DiaSemana)
+                .ToListAsync();
+
             // Filtro de actividad en memoria
             var ahora = DateTime.UtcNow;
             var descuentosActivos = todosDescuentos.Where(d =>
@@ -129,7 +148,7 @@ namespace Vinto.Api.Controllers
                     LinkWhatsapp = administrador.LinkWhatsapp,
                     LogoUrl = administrador.LogoUrl,
                     Direccion = administrador.Direccion,
-                    EsActivo = administrador.EsActivo,
+                    EsActivo = administrador.EsActivo, // LEGADO: al responder se pisa con Estado.EstaAbierto (ver LocalInfoDTO)
                     AliasTransferencia = administrador.AliasTransferencia,
                     TitularCuenta = administrador.TitularCuenta,
                     Horarios = administrador.Horarios,
@@ -166,35 +185,32 @@ namespace Vinto.Api.Controllers
                     Nombre = d.Nombre,
                     Tipo = d.Tipo,
                     Valor = d.Valor
-                }).ToList()
+                }).ToList(),
+                // Estado queda en null: depende de la hora y se calcula en cada request, fuera de la caché.
+                Horario = new HorarioMenuDTO
+                {
+                    ZonaHoraria = administrador.ZonaHoraria,
+                    Dias = horarios.Select(HorarioLocalMapper.ADto).ToList()
+                }
             };
 
-            var entrada = new MenuPublicoCacheado(response, logoImagen?.Url);
+            var entrada = new MenuPublicoCacheado(
+                response,
+                logoImagen?.Url,
+                new HorarioMenuCacheado(administrador.Id, administrador.ZonaHoraria, administrador.CerradoManualmente, horarios));
             _menuCache.Set(slugNormalizado, entrada, tokenInvalidacion);
 
-            return Ok(ArmarRespuesta(entrada, baseUrl));
+            return Ok(MenuPublicoArmador.Armar(entrada, baseUrl, CalcularEstado(entrada)));
         }
 
-        // La URL absoluta del logo depende del Host del request: no se cachea, se arma acá.
-        // Con Blob Storage el valor guardado ya es absoluto (https://...); con almacenamiento local es
-        // relativo (/uploads/...). Solo se antepone el host a los relativos.
-        private static MenuPublicoResponseDTO ArmarRespuesta(MenuPublicoCacheado entrada, string baseUrl)
+        // El estado depende de la hora: se calcula en cada request (HIT o MISS) con TimeProvider, nunca se cachea.
+        // Si los horarios guardados no se pueden evaluar (zona inválida) se loguea y el local figura abierto.
+        private EstadoLocal CalcularEstado(MenuPublicoCacheado entrada)
         {
-            var menu = entrada.Menu;
-            var logo = entrada.LogoImagenPath;
-            var logoAbsoluto = logo == null
-                ? null
-                : logo.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
-                  || logo.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
-                    ? logo
-                    : baseUrl + logo;
-
-            return new MenuPublicoResponseDTO
-            {
-                Local = menu.Local.ConLogoImagenUrl(logoAbsoluto),
-                Categorias = menu.Categorias,
-                DescuentosPedidoCompleto = menu.DescuentosPedidoCompleto
-            };
+            var horario = entrada.Horario;
+            return EstadoLocalPublico.Calcular(
+                _estadoCalculator, horario.Horarios, horario.CerradoManualmente, horario.ZonaHoraria,
+                _timeProvider.GetUtcNow(), _logger, horario.AdministradorId);
         }
 
         [Microsoft.AspNetCore.RateLimiting.EnableRateLimiting("consultaPublica")]
