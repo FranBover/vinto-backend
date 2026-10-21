@@ -1,9 +1,11 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Vinto.Api.Helpers;
 
 namespace Vinto.Api.Hubs
 {
-    [Authorize]
+    // Solo acepta el ticket de 60 s de POST api/Hub/ticket; el JWT de sesion no sirve aca (ver JwtTokens).
+    [Authorize(AuthenticationSchemes = JwtTokens.EsquemaHub)]
     public class PedidosHub : Hub
     {
         public override async Task OnConnectedAsync()

@@ -108,25 +108,7 @@ namespace Vinto.Api.Controllers
 
         private string GenerateToken(Administrador admin)
         {
-            var claims = new[]
-            {
-                new Claim(JwtRegisteredClaimNames.Sub, admin.Email),
-                new Claim("adminId", admin.Id.ToString()),
-                new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString())
-            };
-
-            var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.Key));
-            var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
-
-            var token = new JwtSecurityToken(
-                issuer: _jwtSettings.Issuer,
-                audience: _jwtSettings.Audience,
-                claims: claims,
-                expires: DateTime.UtcNow.AddMinutes(_jwtSettings.ExpirationInMinutes),
-                signingCredentials: creds
-            );
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            return JwtTokens.EmitirSesion(_jwtSettings, admin.Email, admin.Id, DateTime.UtcNow);
         }
     }
 }

@@ -8,6 +8,8 @@ namespace Vinto.Api.Repositories.Interfaces
         Task<Administrador?> ObtenerPorId(int id);
         // Única resolución de local por slug público: solo locales activos, filtrado en SQL.
         Task<Administrador?> ObtenerActivoPorSlugAsync(string slug);
+        // Existe y tiene la cuenta habilitada (EsActivo). Una sola columna, sin traer ni trackear la entidad.
+        Task<bool> EstaHabilitadoAsync(int id);
         Task<bool> ExisteSlugAsync(string slug, int? excluirAdminId = null);
         Task<string> GenerarSlugUnicoAsync(string baseSlug);
         Task Crear(Administrador administrador);

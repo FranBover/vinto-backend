@@ -36,6 +36,12 @@ namespace Vinto.Api.Repositories.Implementaciones
                 .FirstOrDefaultAsync(a => a.EsActivo && a.SlugLocal == slugNormalizado);
         }
 
+        public async Task<bool> EstaHabilitadoAsync(int id)
+        {
+            return await _context.Administradores
+                .AnyAsync(a => a.Id == id && a.EsActivo);
+        }
+
         public async Task<bool> ExisteSlugAsync(string slug, int? excluirAdminId = null)
         {
             return await _context.Administradores

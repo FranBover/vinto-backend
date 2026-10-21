@@ -83,7 +83,7 @@ Un pedido que entra tiene que aparecer en el panel sin que nadie recargue nada. 
 
 Cada conexión se suscribe a un grupo identificado por el `adminId`, y cuando entra un pedido el evento se emite solo a ese grupo. La decisión que importa está en cómo se arma el grupo: el `PedidosHub` lo deriva del claim del token en `OnConnectedAsync`, en vez de exponer un método `JoinGroup(adminId)` que el cliente invoque. Si el cliente eligiera su grupo, cualquiera con un token válido podría suscribirse al de otro negocio y espiar sus pedidos en vivo. Derivándolo del token, eso es imposible.
 
-Hay un detalle de infraestructura: el navegador no puede mandar el header `Authorization` en el handshake de un WebSocket. Se resuelve en `Program.cs` con un handler de `OnMessageReceived` que lee el token del query string `access_token`, pero **solo** para rutas bajo `/hubs`; el resto de la API sigue exigiendo el header.
+Hay un detalle de infraestructura: el navegador no puede mandar el header `Authorization` en el handshake de un WebSocket. Se resuelve con un ticket de 60 segundos: el panel lo pide a `POST /api/Hub/ticket` (con el JWT de sesión en el header) y lo manda al hub en el query string `access_token`. El hub acepta **solo** ese ticket (esquema `HubTicket` en `Program.cs`, audience propio) y el resto de la API no lo acepta; así el JWT de sesión, que dura 12 horas, nunca queda en una URL ni en los logs.
 
 Eventos que emite el servidor: `NuevoPedido` y `PagoConfirmado`.
 
@@ -267,7 +267,7 @@ Base: `/api`. Los endpoints privados requieren `Authorization: Bearer <token>`.
 
 ### SignalR
 
-`/hubs/pedidos` — el token viaja por query string `access_token`. Eventos servidor → cliente: `NuevoPedido`, `PagoConfirmado`.
+`/hubs/pedidos` — se conecta con un ticket de 60 s (`POST /api/Hub/ticket`), no con el JWT de sesión; el ticket viaja por query string `access_token`. Eventos servidor → cliente: `NuevoPedido`, `PagoConfirmado`.
 
 ---
 
@@ -295,7 +295,7 @@ Este archivo está en `.gitignore` y nunca se versiona. Configuración mínima p
     "Key": "CLAVE_DE_AL_MENOS_32_CARACTERES",
     "Issuer": "VintoAPI",
     "Audience": "VintoFrontend",
-    "ExpirationInMinutes": 480
+    "ExpirationInMinutes": 720
   },
   "AdminRegistroKey": "CLAVE_PARA_HABILITAR_EL_REGISTRO",
   "Encryption": {

@@ -22,6 +22,12 @@ using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// El JWT del hub viaja en el query string (access_token) y la sesion del panel dura 12 h. El log
+// "Request starting ..." de Hosting.Diagnostics imprime el QueryString completo a nivel Information:
+// como appsettings.json no se despliega, sin este filtro el token saldria a stdout / Log Stream salvo
+// que App Settings defina Logging__LogLevel. Declarado en codigo, queda despues de la configuracion y gana.
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
+
 var jwtSettings = builder.Configuration.GetSection("JwtSettings").Get<JwtSettings>();
 var key = Encoding.UTF8.GetBytes(jwtSettings.Key);
 
@@ -33,32 +39,45 @@ builder.Services.AddAuthentication(options =>
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
     options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
 })
+// Esquema por defecto: la sesion del panel, SOLO por el header Authorization (nunca lee el query string).
 .AddJwtBearer(options =>
 {
-    options.TokenValidationParameters = new TokenValidationParameters
-    {
-        ValidateIssuer = true,
-        ValidateAudience = true,
-        ValidateLifetime = true,
-        ValidateIssuerSigningKey = true,
-        ValidIssuer = builder.Configuration["JwtSettings:Issuer"],
-        ValidAudience = builder.Configuration["JwtSettings:Audience"],
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(
-            builder.Configuration["JwtSettings:Key"] ?? throw new InvalidOperationException("JWT key not found")))
-    };
+    options.TokenValidationParameters = JwtTokens.ParametrosApi(jwtSettings);
 
-    // SignalR no puede enviar el header Authorization en el WebSocket, as� que para las rutas
-    // del hub leemos el token del query string "access_token".
+    // El hub se autentica unicamente con el ticket (esquema HubTicket, abajo). Este esquema ni lo mira:
+    // evita ademas un intento de validacion fallido, con su log, en cada negotiate.
     options.Events = new JwtBearerEvents
     {
         OnMessageReceived = context =>
         {
-            var accessToken = context.Request.Query["access_token"];
-            var path = context.HttpContext.Request.Path;
-            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+            if (context.Request.Path.StartsWithSegments("/hubs"))
+                context.NoResult();
+            return Task.CompletedTask;
+        }
+    };
+})
+// Segundo esquema, solo para /hubs. Hace falta porque cada esquema valida UN audience: un ticket (audience
+// del hub) no puede pasar por el esquema de la API ni una sesion (audience de la API) por este, y con
+// un solo esquema habria que aceptar los dos audience juntos. El navegador no puede mandar el header
+// Authorization en el WebSocket, asi que ahi el ticket va en el query string "access_token"; el negotiate
+// (un POST comun) lo manda en el header. Fuera de /hubs este esquema no autentica nada.
+.AddJwtBearer(JwtTokens.EsquemaHub, options =>
+{
+    options.TokenValidationParameters = JwtTokens.ParametrosHub(jwtSettings);
+
+    options.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            if (!context.Request.Path.StartsWithSegments("/hubs"))
             {
-                context.Token = accessToken;
+                context.NoResult();
+                return Task.CompletedTask;
             }
+
+            var ticket = context.Request.Query["access_token"];
+            if (!string.IsNullOrEmpty(ticket))
+                context.Token = ticket;
             return Task.CompletedTask;
         }
     };
@@ -118,6 +137,7 @@ builder.Services.AddScoped<IHorarioLocalService, HorarioLocalService>();
 builder.Services.AddScoped<IEstadoLocalService, EstadoLocalService>();
 builder.Services.AddScoped<IMercadoPagoService, MercadoPagoService>();
 builder.Services.AddScoped<IReporteService, ReporteService>();
+builder.Services.AddScoped<IHubTicketService, HubTicketService>();
 
 
 
@@ -379,7 +399,14 @@ app.UseAuthentication();
 
 app.UseAuthorization();
 
-app.MapHub<PedidosHub>("/hubs/pedidos");
+app.MapHub<PedidosHub>("/hubs/pedidos", options =>
+{
+    // false es el default; se deja explicito porque el ticket dura 60 s y solo sirve para ABRIR la conexion.
+    // Con true SignalR cerraria la conexion cuando vence el ticket y el panel se reconectaria cada minuto.
+    // Costo asumido: una conexion abierta sigue viva aunque la sesion venza o la cuenta se deshabilite;
+    // el panel la cierra al expirar la sesion y cada reconexion nueva exige un ticket nuevo.
+    options.CloseOnAuthenticationExpiration = false;
+});
 
 app.MapControllers();
 
